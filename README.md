@@ -1,4 +1,4 @@
-# Semiconductor Workshop Technical Handbook + Supporting Materials
+# Semiconductor Workshop Technical Handbook
 
 This repository was created as part of Summer Internship 2026, under the Guidance of Prof. A. Srivastava.
 authored by myself. 
