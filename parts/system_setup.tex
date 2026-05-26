@@ -1,1 +1,24 @@
 \custompart{SYSTEM SETUP}{Operating System Deployment and RHEL Workstation Initialization}
+\chapter{RHEL Installation and Setup}
+
+
+\section{What is EDA and why is it used?}
+
+Electronic Design Automation (EDA) refers to the collection of software tools, computational frameworks, and engineering workflows used in the design, simulation, verification, and physical implementation of integrated circuits and semiconductor systems. Modern semiconductor devices contain millions to billions of transistors operating at extremely small geometries, making manual design methodologies computationally impractical and operationally impossible. EDA tools therefore serve as the foundational infrastructure enabling engineers to transform conceptual circuit designs into manufacturable silicon devices. \\ 
+
+Contemporary EDA environments encompass a wide range of specialized applications including schematic capture systems, Hardware Description Language (HDL) development environments, circuit simulators, synthesis tools, physical layout editors, parasitic extraction frameworks, timing analysis engines, and design-rule verification systems. These tools collectively support the complete semiconductor development lifecycle, from behavioral modeling and functional verification to physical layout generation and fabrication validation.\\
+
+The increasing complexity of Very Large Scale Integration (VLSI) systems has made EDA indispensable within both academic and industrial semiconductor design workflows. Beyond improving productivity, EDA enables precision, scalability, repeatability, and verification accuracy that would otherwise be unattainable through conventional design methodologies. As a result, modern semiconductor engineering is fundamentally dependent upon robust EDA infrastructure and the computational environments that support it.\\
+
+\section{Why Enterprise Linux Anchors Modern EDA?}
+
+Modern EDA toolchains impose demanding requirements on the underlying operating system environment, including stability, deterministic behavior, scripting flexibility, network interoperability, multi-user access control, and long-term software compatibility. Consequently, semiconductor design organizations and research laboratories overwhelmingly deploy EDA infrastructure on Linux-based operating systems rather than general-purpose desktop platforms.\\
+
+Linux provides a highly modular and administratively transparent environment capable of supporting complex engineering workflows involving distributed compute resources, centralized licensing systems, shared storage infrastructure, remote administration, and automated deployment methodologies. Native shell scripting capabilities, package management systems, process control utilities, and network tooling further enable scalable workstation administration and reproducible environment configuration across large laboratory deployments.\\
+
+Among available Linux distributions, enterprise-grade platforms such as \textbf{Red Hat Enterprise Linux (RHEL)} and its derivatives have become the de facto standard within semiconductor design environments. Their widespread adoption is driven by long-term support lifecycles, predictable release stability, extensive vendor certification, and broad compatibility with commercial EDA applications. Most major semiconductor tool vendors officially validate and support their software primarily on enterprise Linux environments, making RHEL-based systems the preferred foundation for reliable and maintainable CAD infrastructure deployment.\\
+
+Accordingly, the workstation architecture described throughout this manual is built upon a standardized RHEL-based environment designed to provide operational consistency, scalability, and long-term maintainability for semiconductor design laboratories and VLSI research workflows.\\
+
+
+
