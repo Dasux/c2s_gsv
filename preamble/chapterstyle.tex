@@ -1,0 +1,22 @@
+\renewcommand{\thechapter}{\arabic{chapter}}
+\newcommand{\chapterdisplaynumber}{\ifnum\value{chapter}<10 0\fi\arabic{chapter}}
+
+\titlecontents{chapter}
+  [3em]
+  {\addvspace{0.9em}\headingfont\bfseries}
+  {\contentslabel[\thecontentslabel.]{3em}}
+  {}
+  {\titlerule*[0.7pc]{.}\makebox[2em][r]{\contentspage}}
+
+% ----------------------------------------
+% Chapter Style
+% ----------------------------------------
+
+\titleformat{\chapter}[display]
+{\normalfont\headingfont}
+{\vspace{-1.2cm}\fontsize{58}{64}\selectfont\bfseries\color{chaptergray}\chapterdisplaynumber}
+{0.6em}
+{\vspace{0.5em}\Huge\bfseries\color{ink}}
+[\vspace{0.55em}{\color{rulegray}\titlerule[0.6pt]}\vspace{0.7em}{\large\mdseries\itshape\color{mutedink}\chaptersubtitle}\vspace{1.8em}]
+
+\titlespacing*{\chapter}{0pt}{0pt}{1.2cm}

@@ -1,0 +1,62 @@
+\RequirePackage{fix-cm}
+\documentclass[10pt, a4paper]{book}
+
+% ----------------------------------------
+% Preamble
+% ----------------------------------------
+\input{preamble/packages}
+\input{preamble/typography}
+\input{preamble/colors}
+\input{preamble/commands}
+\input{preamble/metadata}
+\input{preamble/chapterstyle}
+\input{preamble/partstyle}
+\input{preamble/hyperref}
+
+\begin{document}
+
+% ----------------------------------------
+% Frontmatter
+% ----------------------------------------
+\hypersetup{pageanchor=false}
+\input{frontmatter/titlepage}
+\frontmatter
+\hypersetup{pageanchor=true}
+\input{frontmatter/abstract}
+\input{frontmatter/preface}
+\begin{spacing}{1.25}
+  \tableofcontents
+\end{spacing}
+\newpage
+
+% ----------------------------------------
+% Mainmatter
+% ----------------------------------------
+\mainmatter
+\input{parts/system_setup}
+\input{chapters/rhel_installation}
+\input{parts/eda_deployment}
+\input{chapters/cadence_installation}
+\input{chapters/environment_variables}
+\input{chapters/license_server}
+\input{chapters/shell_configuration}
+\input{parts/administration}
+\input{parts/troubleshooting}
+\input{chapters/recovery_procedures}
+\input{parts/maintenance}
+
+% ----------------------------------------
+% Appendices
+% ----------------------------------------
+\appendix
+\input{appendices/command_reference}
+\input{appendices/environment_variables_reference}
+\input{appendices/troubleshooting_matrix}
+
+% ----------------------------------------
+% Bibliography
+% ----------------------------------------
+\bibliographystyle{plain}
+\bibliography{bibliography/references}
+
+\end{document}

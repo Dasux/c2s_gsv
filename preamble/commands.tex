@@ -1,0 +1,27 @@
+% Styles
+\tikzset{
+  box/.style = {rectangle, draw=black, rounded corners, minimum width=4.5cm, minimum height=1.1cm, align=left, font=\small, inner sep=6pt},
+  arr/.style = {-latex}
+}
+
+% ----------------------------------------
+% Chapter Subtitle Storage
+% ----------------------------------------
+
+\newcommand{\chaptersubtitle}{}
+
+% ----------------------------------------
+% Custom Chapter Command
+%
+% Usage:
+%
+% \customchapter
+% {Main Title}
+% {Subtitle}
+%
+% ----------------------------------------
+
+\newcommand{\customchapter}[2]{
+    \renewcommand{\chaptersubtitle}{#2}
+    \chapter[#1]{#1}
+}
