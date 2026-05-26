@@ -1,3 +1,7 @@
+% ========================================
+% PART STYLE CONFIGURATION
+% ========================================
+
 % ----------------------------------------
 % PART SUBTITLE STORAGE
 % ----------------------------------------
@@ -13,11 +17,18 @@
 % {MAIN TITLE}
 % {Subtitle text}
 %
+% Example:
+%
+% \custompart
+% {SYSTEM SETUP}
+% {Operating system deployment and workstation initialization}
+%
 % ----------------------------------------
 
 \newcommand{\custompart}[2]{
     \renewcommand{\partsubtitle}{#2}
     \part{#1}
+    \renewcommand{\partsubtitle}{}
 }
 
 \titlecontents{part}
@@ -32,24 +43,29 @@
 % ----------------------------------------
 
 \titleformat{\part}[display]
-{\normalfont\headingfont}
-{}
-{0pt}
+{\normalfont\headingfont\centering}
 {
-    \thispagestyle{empty}
-    \centering
-    \vspace{3cm}
-    {\color{rulegray}\rule{0.72\textwidth}{0.6pt}}
-    \vspace{1.2cm}
-    \Huge\bfseries\color{ink}
+    \vspace*{\fill}
+    \huge\bfseries
+    Part \Roman{part}
+}
+{20pt}
+{
+    \Huge\bfseries
+    \color{ink}
 }
 [
-    \vspace{0.8cm}
-    {\Large\mdseries\itshape\color{mutedink}
-    \partsubtitle}
-    \vspace{1.2cm}
-    {\color{rulegray}\rule{0.72\textwidth}{0.6pt}}
-    \vfill
+    \vspace{0.6cm}
+    {\color{rulegray}\rule{0.42\textwidth}{0.5pt}\\}
+    \vspace{0.45cm}
+    {
+        \Large
+        \mdseries
+        \itshape
+        \color{mutedink}
+        \partsubtitle
+    }
+    \vspace*{\fill}
 ]
 
 % ----------------------------------------
