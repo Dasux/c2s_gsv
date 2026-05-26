@@ -1,0 +1,11 @@
+# Ignore everything by default.
+*
+
+# Keep Git ignore rules and directories visible.
+!.gitignore
+!*/
+
+# Track only these document output/source formats.
+!*.html
+!*.tex
+!*.pdf

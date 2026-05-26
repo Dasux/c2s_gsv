@@ -1,6 +1,59 @@
+% ----------------------------------------
+% PART SUBTITLE STORAGE
+% ----------------------------------------
+
+\newcommand{\partsubtitle}{}
+
+% ----------------------------------------
+% CUSTOM PART COMMAND
+%
+% Usage:
+%
+% \custompart
+% {MAIN TITLE}
+% {Subtitle text}
+%
+% ----------------------------------------
+
+\newcommand{\custompart}[2]{
+    \renewcommand{\partsubtitle}{#2}
+    \part{#1}
+}
+
 \titlecontents{part}
   [0em]
   {\addvspace{1.4em}\headingfont\large\bfseries}
   {}
   {}
   {\hfill\contentspage}
+
+% ----------------------------------------
+% PART TITLE FORMAT
+% ----------------------------------------
+
+\titleformat{\part}[display]
+{\normalfont\headingfont}
+{}
+{0pt}
+{
+    \thispagestyle{empty}
+    \centering
+    \vspace{3cm}
+    {\color{rulegray}\rule{0.72\textwidth}{0.6pt}}
+    \vspace{1.2cm}
+    \Huge\bfseries\color{ink}
+}
+[
+    \vspace{0.8cm}
+    {\Large\mdseries\itshape\color{mutedink}
+    \partsubtitle}
+    \vspace{1.2cm}
+    {\color{rulegray}\rule{0.72\textwidth}{0.6pt}}
+    \vfill
+]
+
+% ----------------------------------------
+% PART SPACING
+% ----------------------------------------
+
+\titlespacing*{\part}{0pt}{0pt}{0pt}
