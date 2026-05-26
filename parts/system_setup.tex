@@ -2,7 +2,7 @@
 \chapter{RHEL Installation and Setup}
 
 
-\section{What is EDA and why is it used?}
+\section{Introduction to EDA}
 
 Electronic Design Automation (EDA) refers to the collection of software tools, computational frameworks, and engineering workflows used in the design, simulation, verification, and physical implementation of integrated circuits and semiconductor systems. Modern semiconductor devices contain millions to billions of transistors operating at extremely small geometries, making manual design methodologies computationally impractical and operationally impossible. EDA tools therefore serve as the foundational infrastructure enabling engineers to transform conceptual circuit designs into manufacturable silicon devices. \\ 
 
@@ -20,5 +20,72 @@ Among available Linux distributions, enterprise-grade platforms such as \textbf{
 
 Accordingly, the workstation architecture described throughout this manual is built upon a standardized RHEL-based environment designed to provide operational consistency, scalability, and long-term maintainability for semiconductor design laboratories and VLSI research workflows.\\
 
+% ============================================================
+%  Section: Red Hat Enterprise Linux as Industrial Infrastructure
+% ============================================================
 
+\section{Red Hat Enterprise Linux as Industrial Infrastructure}
+
+The decision to standardize a semiconductor design environment on a specific Linux distribution is not a matter of administrative preference. It is an infrastructure decision with direct consequences for EDA tool compatibility, operational stability, vendor support, and long-term maintainability. Within professional semiconductor environments, Red Hat Enterprise Linux has become a preferred foundation because it provides the stability and compatibility characteristics required by commercial EDA workflows.\\
+
+\noindent Commercial EDA tools are typically distributed as precompiled binary applications that depend on stable system libraries, predictable runtime behavior, and well-defined operating system interfaces. RHEL maintains Application Binary Interface and Application Programming Interface consistency within a major release, allowing validated tool installations to remain reliable across routine system updates. This consistency is especially important for tools that depend on components such as \texttt{glibc}, \texttt{libX11}, Motif libraries, OpenSSL, shell utilities, and kernel-level behavior.\\
+
+\noindent RHEL also provides long-term lifecycle stability that aligns well with semiconductor design workflows. A laboratory or production design environment may depend on a specific operating system and EDA tool combination for several years. Frequent distribution-level changes can introduce dependency drift and invalidate previously working configurations. By contrast, RHEL's enterprise release model prioritizes predictable maintenance, security updates, and controlled package evolution over rapid upstream change.\\
+
+\noindent Vendor certification is another important factor. Major EDA vendors commonly certify their tools against specific RHEL major versions and closely compatible derivatives. Operating within a certified platform reduces support risk, simplifies troubleshooting, and provides a defensible baseline when vendor escalation is required. While unsupported Linux distributions may sometimes run the same tools, they introduce additional uncertainty into installation, execution, and support workflows.\\
+
+\noindent The RHEL ecosystem also supports maintainable administration practices through standard tools such as \texttt{dnf}, \texttt{systemd}, \texttt{lvm}, \texttt{sssd}, and \texttt{subscription-manager}. These tools provide a well-documented administrative surface for package management, service control, storage configuration, authentication integration, and system maintenance. In institutional environments where systems must be rebuilt, audited, extended, or handed over between administrators, this consistency is a practical advantage.\\
+
+\noindent Throughout the remainder of this manual, operating system procedures, configuration examples, package names, service management commands, and administrative workflows are specified for a RHEL~9-compatible environment. Unless otherwise noted, the procedures also apply to Rocky Linux~9 and AlmaLinux~9 as binary-compatible RHEL derivatives. References to \emph{RHEL} in the operational context of this document should therefore be understood to include these derivatives unless a Red Hat subscription-specific feature is explicitly required.\\
+
+
+% ============================================================
+%  Section: Design Philosophy of the EDA Environment
+% ============================================================
+\section{Design Philosophy of the EDA Environment}
+
+The semiconductor design infrastructure described in this manual is not assembled opportunistically.
+It is engineered according to a defined set of operational principles that govern every decision from
+initial workstation deployment through long-term maintenance. Understanding these principles is
+necessary context for the procedures that follow, because many configuration choices that might
+otherwise appear arbitrary are direct expressions of the underlying philosophy.\\
+
+The environment is built around \textbf{standardization}. All workstations in the laboratory are
+deployed from a common baseline: identical operating system version, identical package selection,
+identical directory structures, and identical tool installation paths. Deviation from this baseline
+is treated as an exception requiring justification, not a routine outcome of per-machine
+administration. Standardization is the prerequisite for everything else. \\
+
+From standardization follows \textbf{reproducibility}. A workstation rebuilt from documented
+procedures should produce an environment functionally identical to the one it replaces. This
+property matters both operationally---when a workstation fails and must be restored---and
+institutionally, as the laboratory's administrative knowledge must remain embedded in its
+documentation rather than in the accumulated state of individual machines.\\
+
+The deployment is designed to \textbf{scale}. Procedures written for a single workstation apply
+without modification to the full laboratory fleet. Configuration that must be individually
+customized per machine is a design defect. Where centralized mechanisms exist---for user
+authentication, license server connectivity, shared storage, or environment initialization---they
+are used in preference to local equivalents.\\
+
+\textbf{Centralized administration} follows from this. User accounts, access permissions, and
+shell environments are managed at the infrastructure level rather than configured locally on each
+workstation. This reduces the administrative surface area, eliminates inconsistency across
+machines, and ensures that changes propagate uniformly rather than requiring repeated per-host
+intervention.\\
+
+Underlying all of these principles is the explicit goal of \textbf{eliminating configuration
+drift}. In long-running laboratory environments, workstations tend to diverge from one another
+over time as ad hoc fixes, local experiments, and undocumented modifications accumulate. The
+procedures in this manual are written to resist this tendency---through documented baselines,
+version-controlled configuration, and periodic validation practices that detect and correct
+deviation before it compounds.\\
+
+The result is an infrastructure in which any workstation can be administered, diagnosed, or
+rebuilt by any administrator with access to this document, without dependence on institutional
+memory or machine-specific knowledge.
+
+
+\section{Overview of Laboratory Infrastructure}
+\section{EDA Tool Requirements and System Constraints}
 
