@@ -1,5 +1,5 @@
-\custompart{SYSTEM SETUP}{Operating System Deployment and RHEL Workstation Initialization}
-\chapter{RHEL Installation and Setup}
+
+\chapter{Foundations of the EDA Environment}
 
 
 \section{Introduction to EDA}
@@ -87,5 +87,119 @@ memory or machine-specific knowledge.
 
 
 \section{Overview of Laboratory Infrastructure}
-\section{EDA Tool Requirements and System Constraints}
+% ============================================================
+%  Section: Workstation Hardware Requirements and Deployment Constraints
+% ============================================================
+\section{Workstation Hardware Requirements and Deployment Constraints}
+
+Electronic Design Automation tools impose system resource requirements that differ substantially
+from those of general-purpose desktop software. A typical office productivity environment or
+software development workstation can operate adequately on modest storage allocations, a few
+gigabytes of memory, and commodity processor performance. EDA environments do not share these
+characteristics. The software stacks involved in a complete semiconductor design workflow are
+architecturally large, computationally intensive, and operationally demanding in ways that must
+be accounted for at the infrastructure planning stage rather than addressed reactively after
+deployment. 
+
+\subsection{Storage Requirements}
+
+Modern EDA suites consist of numerous interrelated tools, each with its own binaries, libraries,
+technology files, process design kits, documentation sets, and supporting scripts. A complete
+installation image for a commercial EDA suite does not occupy gigabytes in the way that a large
+application suite might. It occupies an order of magnitude more. The Cadence EDA installation
+deployed in this laboratory environment occupied approximately \textbf{480~GB} of storage prior
+to the creation of any user project data, simulation output, waveform databases, or temporary
+working files. This figure reflects only the tool installation itself.\\
+
+In practice, active design work compounds storage consumption considerably. Simulation runs
+generate large output datasets. Layout databases accumulate across design iterations. Waveform
+viewers load and cache substantial binary files during interactive sessions. Verification
+engines write intermediate results to disk throughout their execution. Over the operational
+lifetime of a workstation, the storage footprint of the design environment grows continuously.
+Storage planning must therefore account not only for the initial installation image but for a
+realistic projection of working data volume across the deployment period.\\
+
+For this reason, workstations intended for sustained EDA use should be provisioned with local
+storage that provides meaningful headroom beyond the installation baseline. The 480~GB
+installation figure should be treated as a floor, not a target. Configurations that provision
+only enough storage to accommodate the initial installation leave no margin for project data,
+OS overhead, swap allocation, or tool updates, and will require administrative intervention as
+the environment matures.\\
+
+\subsection{Memory Requirements}
+
+Semiconductor design workflows routinely involve multiple concurrently active applications.
+A typical interactive session may involve a layout editor, a schematic capture environment,
+a circuit simulator, a waveform viewer, and a design rule checking utility operating
+simultaneously within the same desktop session. Each of these applications maintains its own
+working set in memory, and several---particularly simulation engines and verification
+utilities---can expand their memory consumption substantially during active computation.\\
+
+Insufficient memory allocation produces predictable and disruptive consequences in this
+context. Operating system memory pressure forces active application data to swap, degrading
+interactive responsiveness and extending simulation runtimes. In severe cases, the out-of-memory
+subsystem may terminate running processes, corrupting simulation state and requiring workflow
+restart. These outcomes are not edge cases in underpowered environments; they are routine
+operational hazards.\\
+
+Workstations deployed for full EDA workflows should be provisioned with sufficient physical
+memory to support concurrent tool operation without inducing swap utilization under normal
+working conditions. The specific requirement varies by workflow, but configurations below
+16~GB of physical memory are generally unsuitable for sustained multi-tool VLSI design
+sessions. Workstations supporting heavier simulation workloads or concurrent multi-user access
+benefit from higher memory allocations accordingly.\\
+
+\subsection{Deployment Methodology: Native Installation versus Virtualization}
+
+The manner in which RHEL is deployed on a workstation has direct consequences for the
+resource availability of the EDA environment. Two deployment models are relevant to this
+laboratory context: direct installation on dedicated hardware, and virtualized deployment
+within a hypervisor environment running on an existing host operating system.\\
+
+In a native installation---whether on a dedicated workstation or in a dual-boot configuration
+alongside an existing operating system---RHEL has unrestricted access to all physical hardware
+resources. The full complement of CPU cores, physical memory, storage throughput, and graphics
+capability is available to the operating system and the EDA tools running within it. This is
+the preferred deployment model for sustained engineering workflows, as it eliminates the
+resource-sharing constraints and performance overhead inherent to virtualized environments.\\
+
+  \begin{figure}[H]
+    \centering
+    \includegraphics[width=0.5\textwidth]{}
+    \caption{screenshot of hyper-V}
+  \end{figure}
+Virtualization, however, represents a practically useful alternative under specific deployment
+conditions. During the initial workshop phase of this laboratory deployment, Microsoft Hyper-V
+was used to provision RHEL virtual machines on workstations running existing Windows
+installations. This approach was selected because many of the available systems contained
+active Windows environments that could not be immediately repartitioned, and the operational
+priority was to make the EDA environment accessible within a constrained preparation timeline.\\
+
+The resource tradeoffs introduced by this approach are significant and should be understood
+clearly. The reference deployment system carried 32~GB of physical memory. Of this, 16~GB was
+allocated to the RHEL virtual machine, with the remaining capacity reserved for the Windows
+host and the memory overhead of the Hyper-V hypervisor layer itself. Under this configuration,
+the EDA environment operates within a resource envelope that is materially smaller than the
+physical hardware could otherwise provide. CPU scheduling is mediated by the hypervisor,
+storage I/O is subject to virtualization overhead, and memory allocation is fixed at provisioning
+time rather than dynamically available from the full physical pool.\\
+
+Virtualized deployment is appropriate for introductory workshops, environment familiarization,
+and short-duration instructional use cases in which the full performance envelope of the EDA
+tools is not required. It is not the preferred model for production semiconductor design
+workflows. As workstation preparation schedules permit, systems initially deployed under
+Hyper-V should be transitioned to native RHEL installations in order to provide the EDA
+environment with unrestricted access to the underlying hardware resources. All procedures
+documented in this manual apply to both deployment models unless a specific section explicitly
+notes otherwise.
+
+\section{Summary}
+\begin{tcolorbox}
+This chapter introduced the foundational concepts underlying modern semiconductor EDA infrastructure and established the operational context for the deployment procedures described throughout this manual. The discussion examined the role of Electronic Design Automation within contemporary VLSI workflows, the infrastructure requirements imposed by commercial EDA toolchains, and the reasons enterprise Linux environments have become the standard platform for semiconductor engineering systems.\\
+
+The chapter further justified the adoption of Red Hat Enterprise Linux as the primary operating system environment for workstation deployment, emphasizing considerations such as long-term stability, vendor certification, maintainability, and compatibility with commercial EDA applications. In addition, the architectural philosophy of the laboratory environment, including standardization, reproducibility, centralized administration, and scalability, was introduced as the guiding framework for all subsequent deployment and maintenance procedures.\\
+
+Finally, the chapter discussed the hardware and deployment considerations associated with EDA environments, including storage requirements, memory allocation strategies, and the operational tradeoffs between native and virtualized deployment methodologies. These concepts collectively establish the technical foundation required for the operating system installation and workstation provisioning procedures described in the following chapter. \\
+\end{tcolorbox}
+
 
