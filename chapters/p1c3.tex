@@ -1,0 +1,18 @@
+\customchapter{Dual Booting RHEL 7.9.0}
+
+
+For the dual-boot demonstration in this chapter, the target operating system is
+\textbf{Red Hat Enterprise Linux 7.9}. This release is used because many institutional EDA
+deployments depend on a qualified operating-system and tool-version combination. In EDA
+environments, the newest operating system is not automatically the best choice; compatibility
+with vendor-supported toolchains, process design kits, license utilities, display libraries, and
+legacy runtime dependencies is often more important than access to the latest desktop features.\\
+
+Dual booting allows RHEL to run directly on the workstation while preserving an existing
+operating system on a separate partition. This is especially useful in academic laboratories
+where a machine may need to support both Linux-based EDA workflows and existing instructional or
+administrative software. The dual-boot model must be planned carefully, because mistakes during
+partitioning or bootloader configuration can make the existing operating system temporarily
+unbootable or, in the worst case, destroy data. Important user files should therefore be backed
+up before installation begins.\\
+

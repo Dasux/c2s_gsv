@@ -144,9 +144,9 @@ operational hazards.\\
 
 Workstations deployed for full EDA workflows should be provisioned with sufficient physical
 memory to support concurrent tool operation without inducing swap utilization under normal
-working conditions. The specific requirement varies by workflow, but configurations below
+working conditions. The specific requirement varies by workflow, but \textbf{configurations below
 16~GB of physical memory are generally unsuitable for sustained multi-tool VLSI design
-sessions. Workstations supporting heavier simulation workloads or concurrent multi-user access
+sessions}. Workstations supporting heavier simulation workloads or concurrent multi-user access
 benefit from higher memory allocations accordingly.\\
 
 \subsection{Deployment Methodology: Native Installation versus Virtualization}
@@ -161,13 +161,9 @@ alongside an existing operating system---RHEL has unrestricted access to all phy
 resources. The full complement of CPU cores, physical memory, storage throughput, and graphics
 capability is available to the operating system and the EDA tools running within it. This is
 the preferred deployment model for sustained engineering workflows, as it eliminates the
-resource-sharing constraints and performance overhead inherent to virtualized environments.\\
+resource-sharing constraints and performance overhead inherent to virtualized environments. \\
 
-  \begin{figure}[H]
-    \centering
-    \includegraphics[width=0.5\textwidth]{}
-    \caption{screenshot of hyper-V}
-  \end{figure}
+
 Virtualization, however, represents a practically useful alternative under specific deployment
 conditions. During the initial workshop phase of this laboratory deployment, Microsoft Hyper-V
 was used to provision RHEL virtual machines on workstations running existing Windows
@@ -183,6 +179,12 @@ the EDA environment operates within a resource envelope that is materially small
 physical hardware could otherwise provide. CPU scheduling is mediated by the hypervisor,
 storage I/O is subject to virtualization overhead, and memory allocation is fixed at provisioning
 time rather than dynamically available from the full physical pool.\\
+
+  \begin{figure}[h]
+    \centering
+    \includegraphics[width=0.6\textwidth]{resources/hyperv.jpg}
+    \caption{Screenshot of Hyper-V}
+  \end{figure}
 
 Virtualized deployment is appropriate for introductory workshops, environment familiarization,
 and short-duration instructional use cases in which the full performance envelope of the EDA

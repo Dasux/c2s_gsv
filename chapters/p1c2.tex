@@ -1,0 +1,244 @@
+\chapter{RHEL Installation and Setup}
+
+\begin{tcolorbox}
+	\textbf{Note:} This guide assumes you are familiar with Linux environments to a basic degree, and are comfortable with the terminal. We will not discuss the entire installation process, only the core infrastructure decisions that needs to be made for successful setup of the base system. \\
+
+	That being said however, every decision and command will be discussed in elaborate detail -- justifying why it was made, and what it does.
+\end{tcolorbox}
+
+
+\section{Installation Planning and Deployment Strategy}
+
+Before a workstation is installed, the deployment method must be selected deliberately. The
+choice is not merely a matter of convenience; it determines how the machine will consume
+hardware resources, how reliably EDA tools will interact with the operating system, how easily
+the workstation can be maintained, and how closely the final environment will resemble a
+production semiconductor design platform. In the context of this manual, RHEL is treated as the
+operating system baseline for a controlled EDA workstation rather than as a general-purpose
+desktop installation.\\
+
+There are two practical ways to deploy RHEL on a laboratory workstation:
+\begin{enumerate}
+	\item \textbf{Virtualization} -- installing RHEL inside a virtual machine hosted by an
+	existing operating system.
+	\item \textbf{Dual booting} -- installing RHEL directly on the physical machine alongside
+	an existing operating system by using bootable installation media.
+\end{enumerate} 
+
+Virtualization is useful for training, experimentation, documentation, and low-risk validation
+of administrative procedures. It allows the installer to be tested without repartitioning the
+physical disk and makes it easy to take snapshots before major configuration changes. However,
+virtual machines introduce an additional abstraction layer between the EDA workload and the
+hardware. This can limit graphics performance, memory availability, disk throughput, USB access,
+license-dongle support, and other device-level behavior that may matter during tool deployment
+or troubleshooting.\\
+
+Dual booting installs RHEL natively on the workstation hardware. This approach gives the Linux
+environment direct access to the CPU, memory, graphics adapter, storage devices, and network
+interfaces, making it the preferred method when the machine is expected to function as a serious
+EDA workstation. Native installation also more closely matches the assumptions made by commercial
+EDA vendors, whose installation and support documentation typically targets physical or
+enterprise-managed Linux systems rather than desktop virtual machines.\\
+
+The decision made at this stage affects the entire downstream configuration: disk layout, package
+selection, driver support, user account preparation, license-server connectivity, shared storage
+mounts, backup strategy, and future system recovery. For that reason, the installation procedure
+should be selected before any partitioning or media preparation begins. This chapter documents
+the installation workflow with attention to university licensing constraints, C2S operational
+guidelines, and the need for a reproducible workstation baseline. \\
+
+
+
+
+\section{Hardware Requirements and Workstation Specifications}
+A modern semiconductor CAD workstation intended for full-scale Cadence deployment must be provisioned with significantly higher hardware resources than a conventional desktop system. Contemporary EDA workflows involve computationally intensive applications for schematic capture, mixed-signal simulation, physical layout, parasitic extraction, verification, and waveform analysis, many of which operate on large design databases and generate substantial intermediate data during execution. In addition to the operating system itself, a complete Cadence installation together with process design kits (PDKs), technology libraries, simulation environments, temporary build data, and user project directories can consume several hundred gigabytes of storage. Workstations intended for academic laboratory deployment should therefore prioritize memory capacity, storage performance, multi-core CPU capability, thermal stability, and long-term maintainability over consumer-oriented graphical features. While smaller configurations may support introductory workflows, a poorly provisioned workstation can significantly degrade simulation performance, layout responsiveness, and overall user productivity during large-scale VLSI design tasks.\\
+
+
+The recommended baseline for a Cadence-based EDA workstation is summarized below:
+
+\begin{itemize}
+	\item \textbf{Processor:} Modern multi-core 64-bit processor with virtualization support; Intel Core i7, AMD Ryzen 7, or higher is recommended, with 8 cores preferred.
+	\item \textbf{Memory:} Minimum 16~GB RAM for basic educational workflows; 32~GB or higher
+	is recommended for large simulations and multi-user laboratory use.
+	\item \textbf{Primary storage:} Minimum 500~GB SSD dedicated to Linux and EDA tools;
+	1~TB NVMe SSD is preferred for better database and simulation performance.
+	\item \textbf{Secondary storage:} Optional high-capacity HDD or NAS-backed storage for
+	project archives, backups, and shared design data.
+	\item \textbf{Graphics:} A discrete GPU is generally not required for most Cadence
+	workflows, but stable OpenGL support is recommended for layout visualization.
+	\item \textbf{Display:} 1920$\times$1080 minimum resolution; dual monitors are strongly
+	recommended for schematic, layout, and waveform analysis.
+	\item \textbf{Network:} Gigabit Ethernet is strongly recommended for license-server
+	communication, shared storage access, and centralized administration.
+	\item \textbf{Firmware:} UEFI-capable system preferred with configurable Secure Boot
+	settings.
+	\item \textbf{Operating system:} RHEL 7.9 or an institution-approved RHEL-compatible
+	enterprise Linux distribution.
+\end{itemize}
+
+\vspace{0.5cm}
+\noindent At the time of writing of this document, the current system available to us had the following specs:
+
+\begin{table}[H]
+	\centering
+	\renewcommand{\arraystretch}{1.4}
+
+	\begin{tabular}{|p{5cm}|p{8cm}|}
+		\hline
+		\textbf{Component} & \textbf{Detected Specification} \\
+		\hline
+		Workstation Model &
+		HP Z4 G5 Workstation Desktop PC \\
+		\hline
+		System Type &
+		64-bit x86 Workstation Platform \\
+		\hline
+		Processor (CPU) &
+		Intel Xeon w3-2423 Processor \\
+		&
+		6 Physical Cores, 12 Logical Processors \\
+		&
+		Base Frequency: 2.11 GHz \\
+		\hline
+		Installed Memory (RAM) &
+		32 GB DDR Memory Installed \\
+		\hline
+		Firmware / BIOS Mode &
+		UEFI Boot Mode Enabled \\
+		\hline
+		Secure Boot Status &
+		Enabled \\
+		\hline
+		Virtualization Support &
+		Hardware Virtualization Enabled \\
+		&
+		Hypervisor and Virtualization-Based Security Active \\
+		\hline
+		Motherboard Platform &
+		HP System Board 8962 \\
+		\hline
+		Operating System &
+		Microsoft Windows 11 Pro for Workstations \\
+		&
+		Build 26200 (64-bit) \\
+		\hline
+		Platform Classification &
+		Enterprise Workstation-Class System \\
+		\hline
+		Storage Configuration &
+		Not fully listed in exported report \\
+		&
+		Recommended verification of SSD/NVMe capacity before EDA deployment \\
+		\hline
+		Graphics Processing &
+		Not listed in current report extract \\
+		&
+		Dedicated GPU verification recommended for OpenGL-based layout workflows \\
+		\hline
+	\end{tabular}
+	\caption{Host Workstation Specifications Prior to RHEL Deployment}
+\end{table}
+
+\section{Obtaining the RHEL Installation Media}
+The installation workflow begins with obtaining the correct RHEL installation image from Red
+Hat. A Red Hat Developer account can be used for non-production developer access, subject to Red
+Hat's current subscription terms and the institution's licensing policy. After signing in, the
+installer image should be downloaded from the Red Hat Developer portal:
+
+\begin{center}
+	\url{https://developers.redhat.com/products/rhel/download}
+\end{center}
+
+
+\noindent The downloaded ISO should match the architecture of the workstation, normally
+\texttt{x86\_64} for standard laboratory PCs. The version should also match the operating-system
+baseline approved for the EDA toolchain being deployed. Once the ISO has been downloaded, its
+integrity should be verified when checksum information is available, and the file should be
+stored in a documented location so that future workstation rebuilds use the same installation
+source.\\
+
+Before writing the ISO to a USB drive or modifying the workstation disk, record the machine's
+current boot mode, storage configuration, and existing operating-system layout. In particular,
+confirm whether the system is using UEFI or legacy BIOS boot, whether Secure Boot is enabled,
+how much unallocated disk space is available, and whether the disk uses GPT or MBR partitioning.
+These details determine the correct installation path and reduce the risk of inconsistent
+dual-boot behavior across machines.\\
+
+\begin{tcolorbox}
+	\noindent \textbf{Note:} You can enter the BIOS by pressing F2 on an HP machine. For other systems, it may be different.
+\end{tcolorbox}
+
+
+\section{Disk Partitioning Strategy}
+This is a critical stage in the overall system deployment pipeline and must be approached with precision and caution. Any misconfiguration at this level can result in irreversible data loss, including corruption or removal of existing operating systems such as Windows. \\
+
+Disk partitioning is the process of logically dividing a physical storage device (SSD or HDD) into multiple independent regions, known as partitions. Each partition behaves as a separate storage volume and is assigned a specific role within the operating system architecture. \\
+
+In Linux-based system design, partitioning is not arbitrary. It is a structured layout intended to separate system-critical components, improve stability, simplify recovery, and support long-term maintainability of the environment. \\
+
+A standard Linux workstation deployment typically includes the following core partitions:
+
+\begin{enumerate}
+	\item  EFI Partition -- \textit{mounted at /boot/efi/} \\
+		This is a mandatory boot partition on UEFI-based systems. It stores bootloaders, firmware interfaces, and essential startup binaries required for system initialization. Without this partition, the system cannot boot in a modern UEFI environment.
+
+	\item  Root Partition -- \textit{mounted at /} \\
+		This is the primary filesystem hierarchy. It contains the operating system, installed packages, system binaries, configuration files, and most runtime environments. It effectively forms the core of the Linux installation.
+
+	\item  Swap Partition \\
+		This is a dedicated memory extension area used when physical RAM is fully utilized. It supports memory paging, system hibernation (if enabled), and prevents abrupt failures under memory pressure. While modern systems often use swap files, a dedicated swap partition is preferred in controlled workstation environments for predictability and performance consistency.
+
+\end{enumerate}
+
+You may need to manually create a partition based on your system configuration. Press \textbf{Windows Key} and then type \textbf{Disk Management}. You should see the following:
+
+\begin{figure}[h]
+	\centering
+	\includegraphics[width=0.7\textwidth]{resources/d2.jpg}
+	\caption{Disk Management}
+\end{figure}
+
+From the screenshot, we already have a separate disk --- \textbf{Disk 1}, with a capacity of \textbf{1 TB}. In this case, we can directly use the entire disk without creating additional partitions. However, in the case of a single shared disk, it may be necessary to shrink existing unallocated space in order to create a new partition for installation or data separation. \\
+
+A detailed walkthrough of this process can be found here: \url{https://www.youtube.com/watch?v=WvOId5CRmw8}. \\
+
+For this demonstration, we will skip the partitioning step. The key point of interest here is \textbf{disk identification in Linux}. Unlike Windows, which uses drive letters such as \texttt{C:} or \texttt{D:}, Linux represents storage devices using a structured naming convention. For NVMe SSDs, the naming format is:
+
+\[
+\texttt{nvmeXnYpZ}
+\]
+
+where:
+\begin{itemize}
+    \item \texttt{X} denotes the NVMe controller number (i.e., the physical interface index),
+    \item \texttt{Y} denotes the namespace number (a firmware-defined logical storage unit),
+    \item \texttt{Z} denotes the partition number (a software-defined subdivision of the namespace).
+\end{itemize}
+
+Thus, from the observed system output, we can infer the following mappings:
+
+\begin{gather*}
+    \textbf{Disk 0} \quad \rightarrow \quad \textbf{nvme0n1} \\
+    \textbf{Disk 1} \quad \rightarrow \quad \textbf{nvme1n1}
+\end{gather*}
+
+Furthermore, partitions within these disks are represented as extensions of the namespace identifier. For example:
+\begin{gather*}
+    \textbf{Disk 0, Partition 1} \quad \rightarrow \quad \textbf{nvme0n1p1} \\
+    \textbf{Disk 0, Partition 2} \quad \rightarrow \quad \textbf{nvme0n1p2} \\
+    \textbf{Disk 1, Partition 1} \quad \rightarrow \quad \textbf{nvme1n1p1}
+\end{gather*}
+
+Here, the namespace (\texttt{nY}) represents a firmware-defined logical block device exposed by the NVMe controller, while partitions (\texttt{pZ}) are operating system-defined subdivisions within that namespace used for filesystem organization and data separation.\\
+
+\begin{tcolorbox}
+	\noindent \textbf{Note:} The important thing here to remember the name of the disk we want to install RHEL on. In our case, its \textbf{\textit{nvme1n1}}. The mount-point will be at \textbf{\textit{/dev/nvme1n1}}
+\end{tcolorbox}
+
+
+
+\section{BIOS and UEFI Configuration}
+
+\section{Creating the Installation Media}
+
+\section{Chapter Summary}
