@@ -1,7 +1,7 @@
 \chapter{RHEL Installation and Setup}
 
 \begin{tcolorbox}
-	\textbf{Note:} This guide assumes you are familiar with Linux environments to a basic degree, and are comfortable with the terminal. We will not discuss the entire installation process, only the core infrastructure decisions that needs to be made for successful setup of the base system. \\
+	\textbf{Note:} This guide assumes you are familiar with Linux environments to a basic degree, are comfortable with the terminal, and have an active internet connection. We will not discuss the entire installation process, only the core infrastructure decisions that need to be made for successful setup of the base system. \\
 
 	That being said however, every decision and command will be discussed in elaborate detail -- justifying why it was made, and what it does.
 \end{tcolorbox}
@@ -149,8 +149,19 @@ installer image should be downloaded from the Red Hat Developer portal:
 	\url{https://developers.redhat.com/products/rhel/download}
 \end{center}
 
+\noindent For this workstation deployment, we are using \textbf{Red Hat Enterprise Linux 7.9.0}. This version is
+selected because many EDA tools and supporting libraries are validated against older enterprise
+Linux releases, and RHEL 7.9.0 provides a mature, well-documented platform with broad community
+and vendor support. In an EDA environment, compatibility and predictable behavior are usually
+more important than using the newest available operating-system release.\\
 
-\noindent The downloaded ISO should match the architecture of the workstation, normally
+\begin{figure}[H]
+	\centering
+	\includegraphics[width=0.6\textwidth]{resources/rhel7.9.0.png}
+\end{figure}
+
+
+\noindent \textbf{Make sure to download the DVD not the Boot version.} The downloaded ISO should match the architecture of the workstation, normally
 \texttt{x86\_64} for standard laboratory PCs. The version should also match the operating-system
 baseline approved for the EDA toolchain being deployed. Once the ISO has been downloaded, its
 integrity should be verified when checksum information is available, and the file should be
@@ -164,12 +175,150 @@ how much unallocated disk space is available, and whether the disk uses GPT or M
 These details determine the correct installation path and reduce the risk of inconsistent
 dual-boot behavior across machines.\\
 
+
+
+\section{BIOS, UEFI and Secure Boot Configuration}
+
+Before installing RHEL, it is important to understand the firmware layer that controls how the
+machine starts. The firmware initializes hardware, detects bootable devices, and hands control
+to the operating-system bootloader. Incorrect firmware settings can prevent the installer from
+booting or can cause the installed operating system to disappear from the boot menu.\\
+
+\textbf{BIOS} refers to the older firmware interface used by traditional PCs. It performs basic
+hardware initialization and boots from disks using the legacy boot process, commonly associated
+with MBR partitioning. Modern workstations generally no longer depend on legacy BIOS, but the
+term is still commonly used to refer to the system firmware setup screen.\\
+
+\textbf{UEFI} is the modern replacement for legacy BIOS. It supports GPT partitioning, an EFI
+System Partition, graphical firmware menus, larger disks, and more flexible boot management.
+For current workstation deployments, RHEL should normally be installed in UEFI mode so that it
+matches the boot mode used by Windows and avoids mixed-mode dual-boot problems.\\
+
+\textbf{Secure Boot} is a UEFI security feature that allows only trusted, signed bootloaders and
+kernel components to start during the boot process. It helps protect the system from unauthorized
+boot-time code, but it can also affect Linux installation, third-party drivers, and some
+virtualization workflows if not configured correctly.\\
+
 \begin{tcolorbox}
-	\noindent \textbf{Note:} You can enter the BIOS by pressing F2 on an HP machine. For other systems, it may be different.
+	\noindent \textbf{Note:} On the HP workstation used in this deployment, the firmware setup
+	screen can be entered by pressing \textbf{F2} during startup. On other systems, the key may
+	be different; common alternatives include \textbf{F10}, \textbf{F12}, \textbf{Esc}, or
+	\textbf{Delete}, depending on the manufacturer.
 \end{tcolorbox}
 
+Secure Boot will be discussed in more detail in the next section, separately for native
+dual-boot installation and virtualization-based deployment. The correct setting depends on the
+installation model, the bootloader path, and whether the deployment requires vendor drivers or
+kernel-level components that may not be signed for Secure Boot.\\
 
-\section{Disk Partitioning Strategy}
+\section{Virtualized RHEL Installation}
+A virtualized RHEL installation is useful for evaluating the installer, documenting setup procedures, testing package installations, and training users without modifying the physical workstation disk. In this approach, RHEL runs as a guest operating system inside a hypervisor such as VMware Workstation, VirtualBox, or Hyper-V, while Windows remains the host system, making the process low risk because the virtual disk exists only as a file that can be backed up, restored, or removed easily.\\
+
+Although virtualization accurately reproduces the RHEL userspace, shell environment, package management, and administrative workflow, it does not fully replicate native hardware behavior, particularly for graphics acceleration, USB passthrough, storage performance, license dongles, and memory-intensive EDA workloads. Therefore, virtualization is best suited for validation, learning, and preliminary testing, while native dual booting remains the preferred choice for production-scale Cadence usage. Before creating the VM, ensure that hardware virtualization support (Intel VT-x or AMD-V/SVM) is enabled in the system firmware.
+
+\subsection{Preparing the Virtual Machine}
+We will need to enable Microsoft Hyper-V for this. Click \textbf{Start -> Turn Windows Features On or Off}, scroll till you find the Hyper-V icon and check the box. Restart the system once. 
+\begin{tcolorbox}
+	\textbf{Note:} You need Windows Pro or Enterprise to be able to enable Hyper-V. On Windows-Home Hyper-V is not natively supported, but can be installed via a script provided at the end of this chapter.
+\end{tcolorbox} 
+
+Once you have restarted the system once, open Hyper-V, you will be met with the following screen:
+\begin{figure}[H]
+	\centering
+	\includegraphics[width=0.5\textwidth]{resources/v1.jpg}
+\end{figure}
+
+Click \textbf{"New" $\rightarrow$ "Virtual Machine"} and follow the prompts further. Make sure you choose the correct Installation Media -- the ISO file we installed earlier.
+
+\begin{figure}[H]
+	\centering
+	\includegraphics[width=0.5\textwidth]{resources/v0.jpg}
+\end{figure}
+
+Most of the steps in the prompt are straight-forward. There are a few key configurations you need to keep in mind after setting up the virtual Machine. \textbf{Right Click} on the virtual machine, and then click \textbf{Settings} to open the following window: \\
+
+\begin{figure}[H]
+	\centering 
+	\includegraphics[width=0.5\textwidth]{resources/v2.jpg}
+\end{figure}
+
+
+	 We're interested in only the following three topics, namely:
+\begin{enumerate}
+	\item Firmware -- make sure that DVD drive is at the top of the hierarchy.
+	\begin{figure}[H]
+		\centering 
+		\includegraphics[width=0.5\textwidth]{resources/v3.jpg}
+	\end{figure}
+	\item Security -- disable Secure Boot
+	\begin{figure}[H]
+		\centering 
+		\includegraphics[width=0.5\textwidth]{resources/v4.jpg}
+	\end{figure}
+\item SCSI Controller -- add DVD drive and choose the RHEL ISO file \\ 
+	\begin{minipage}{0.4\textwidth}
+	    \centering
+	    \includegraphics[width=\linewidth]{resources/v5.jpg}
+	\end{minipage}
+	\hfill
+	\begin{minipage}{0.4\textwidth}
+	    \centering
+	    \includegraphics[width=\linewidth]{resources/v6.jpg}
+	\end{minipage}
+\end{enumerate}
+
+After that close the window and click \textbf{Start} and then \textbf{Connect}. You should see the following screen:
+
+
+\begin{figure}[H]
+	\centering 
+	\includegraphics[width=0.5\textwidth]{resources/v7.jpg}
+\end{figure}
+
+Click \textbf{"Install Red Hat Enterprise Linux 7.9"}, and follow the setup prompts. For the "Installation Destination" on the Virtual Machine, it should automatically select the Virtual Disk Space (.vhdx) you set while setting up the Virtual Machine.
+
+\begin{figure}[H]
+	\centering 
+	\includegraphics[width=0.5\textwidth]{resources/v9.jpg}
+\end{figure}
+
+After all this, just one crucial thing is remaining -- the username. Click the following cards in the red box, shown on the image on the left below:
+\vspace{0.5cm}
+
+\begin{figure}[H]
+	\centering 
+	\includegraphics[width=0.5\textwidth]{resources/v8.jpg}
+\end{figure}
+
+For our use case, we're using a placeholder user named \textbf{\textit{user003}}. This username has been chosen for a specific reason, as will be explained in elaborate detail later in this chapter: \\
+
+
+\begin{figure}[H]
+	\centering 
+	\includegraphics[width=0.5\textwidth]{resources/v10.jpg}
+\end{figure}
+
+It is generally wise to keep different root and local user passwords, but since we're setting up a workstation for a Laboratory, we keep the passwords the same. \\
+
+The installation is ready to begin. After the final installation you will be prompted to reboot the virtual Machine. Finally you should see a screen similar to this: (\textit{this is the GNOME desktop environment}) 
+
+
+\begin{figure}[H]
+	\centering 
+	\includegraphics[width=0.5\textwidth]{resources/v11.jpg}
+\end{figure}
+
+\section{Native Dual Booting RHEL 7.9.0}
+
+Dual booting allows RHEL to run directly on the workstation while preserving an existing operating
+system on a separate partition. This is especially useful in academic laboratories where a machine may
+need to support both Linux-based EDA workflows and existing instructional or administrative software. The
+dual-boot model must be planned carefully, because mistakes during partitioning or bootloader configuration
+can make the existing operating system temporarily unbootable or, in the worst case, destroy data. Important
+user files should therefore be backed up before installation begins.
+
+
+\subsection{Disk Partitioning Strategy}
 This is a critical stage in the overall system deployment pipeline and must be approached with precision and caution. Any misconfiguration at this level can result in irreversible data loss, including corruption or removal of existing operating systems such as Windows. \\
 
 Disk partitioning is the process of logically dividing a physical storage device (SSD or HDD) into multiple independent regions, known as partitions. Each partition behaves as a separate storage volume and is assigned a specific role within the operating system architecture. \\
@@ -202,7 +351,7 @@ From the screenshot, we already have a separate disk --- \textbf{Disk 1}, with a
 
 A detailed walkthrough of this process can be found here: \url{https://www.youtube.com/watch?v=WvOId5CRmw8}. \\
 
-For this demonstration, we will skip the partitioning step. The key point of interest here is \textbf{disk identification in Linux}. Unlike Windows, which uses drive letters such as \texttt{C:} or \texttt{D:}, Linux represents storage devices using a structured naming convention. For NVMe SSDs, the naming format is:
+For this demonstration, we will skip the partitioning step. The key point of interest here is \textbf{disk nomenclature in Linux}. Unlike Windows, which uses drive letters such as \texttt{C:} or \texttt{D:}, Linux represents storage devices using a structured naming convention. For NVMe SSDs, the naming format is:
 
 \[
 \texttt{nvmeXnYpZ}
@@ -236,9 +385,16 @@ Here, the namespace (\texttt{nY}) represents a firmware-defined logical block de
 \end{tcolorbox}
 
 
+\subsection{Creating the Installation Media}
 
-\section{BIOS and UEFI Configuration}
+For dual-booting, we need to create something known as a \textbf{"bootable-drive"}. The process is straight-forward. All you need are a USB with atleast 8GB storage capacity, and the ISO we downloaded earlier. To create a bootable-drive, you need a flashing tool. \\
 
-\section{Creating the Installation Media}
+For Windows, the most popular choice is Rufus; can be installed here: \url{https://rufus.ie/en/}. If you're on Linux, the most popular choice is Balena Etcher; can be installed here: \url{https://etcher.balena.io/}.\\
+
+\
+
+\begin{enumerate}
+	\item Plug in your USB and make sure it's mounted. Rufus automatically detects it. 
+\end{enumerate}
 
 \section{Chapter Summary}
