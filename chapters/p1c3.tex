@@ -1,18 +1,37 @@
-\customchapter{Dual Booting RHEL 7.9.0}
+\customchapter{Post Install Configurations}{System identity, licensing, and workstation preparation}
 
+In this chapter we will discuss the post-installation configurations required for the deployed workstations. This includes setting up the appropriate hostname and username nomenclature aligned with the license provided by C2S, preparing the system identity used by the Cadence environment, and installing the relevant software packages required for the Cadence Suite.
 
-For the dual-boot demonstration in this chapter, the target operating system is
-\textbf{Red Hat Enterprise Linux 7.9}. This release is used because many institutional EDA
-deployments depend on a qualified operating-system and tool-version combination. In EDA
-environments, the newest operating system is not automatically the best choice; compatibility
-with vendor-supported toolchains, process design kits, license utilities, display libraries, and
-legacy runtime dependencies is often more important than access to the latest desktop features.\\
+\section{Username/Hostname Configuration} 
 
-Dual booting allows RHEL to run directly on the workstation while preserving an existing
-operating system on a separate partition. This is especially useful in academic laboratories
-where a machine may need to support both Linux-based EDA workflows and existing instructional or
-administrative software. The dual-boot model must be planned carefully, because mistakes during
-partitioning or bootloader configuration can make the existing operating system temporarily
-unbootable or, in the worst case, destroy data. Important user files should therefore be backed
-up before installation begins.\\
+After the base RHEL installation is complete, the first administrative task is to standardize the
+identity of each workstation. In an EDA laboratory environment, usernames and hostnames should not
+be chosen casually. They are used by the operating system, network services, license checks, remote
+administration scripts, shared storage mounts, and Cadence startup environments. If different
+machines follow different naming patterns, the environment becomes difficult to audit and errors in
+license or path configuration become much harder to diagnose.\\
 
+According to the license our university has received, the workstation identity should follow the
+following naming convention:
+\[
+	\text{user0\_X} \; @ \; \text{ECE-X.gsv.ac.in}
+\]
+
+\noindent Here, \texttt{user0X} represents the local Linux username assigned to the workstation user, while
+\texttt{ECE-X.gsv.ac.in} represents the fully qualified hostname assigned to that workstation on the
+department network. The value of \texttt{X} should be replaced by the workstation number or seat number
+allocated by the laboratory administrator. For example, workstation 3 may use the username
+\texttt{user003} and the hostname \texttt{ECE-3.gsv.ac.in}. The important point is that the same numbering
+scheme must be used consistently across the user account, hostname records, license configuration,
+and any administrative documentation.\\
+
+This convention gives every machine a predictable identity. A system administrator can immediately
+identify which physical workstation corresponds to which Linux account and hostname, and the Cadence
+license environment can be configured against a stable naming scheme. Before installing or launching
+Cadence tools, confirm that the selected username and hostname match the C2S license documentation
+and the laboratory workstation inventory. If a machine is renamed later, related configuration files,
+license references, and shell startup scripts may also need to be updated.
+
+\begin{tcolorbox}
+At the time of writing this document, there are officially upto 100 registered workstations for GSV students under the C2S License. The first 70 systems are reserved for the ECE department, while the remaining 30 are reserved for EE department.
+\end{tcolorbox}

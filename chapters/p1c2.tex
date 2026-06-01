@@ -51,7 +51,9 @@ guidelines, and the need for a reproducible workstation baseline. \\
 
 
 \section{Hardware Requirements and Workstation Specifications}
-A modern semiconductor CAD workstation intended for full-scale Cadence deployment must be provisioned with significantly higher hardware resources than a conventional desktop system. Contemporary EDA workflows involve computationally intensive applications for schematic capture, mixed-signal simulation, physical layout, parasitic extraction, verification, and waveform analysis, many of which operate on large design databases and generate substantial intermediate data during execution. In addition to the operating system itself, a complete Cadence installation together with process design kits (PDKs), technology libraries, simulation environments, temporary build data, and user project directories can consume several hundred gigabytes of storage. Workstations intended for academic laboratory deployment should therefore prioritize memory capacity, storage performance, multi-core CPU capability, thermal stability, and long-term maintainability over consumer-oriented graphical features. While smaller configurations may support introductory workflows, a poorly provisioned workstation can significantly degrade simulation performance, layout responsiveness, and overall user productivity during large-scale VLSI design tasks.\\
+A modern semiconductor CAD workstation intended for full-scale Cadence deployment must be provisioned with significantly higher hardware resources than a conventional desktop system. Contemporary EDA workflows involve computationally intensive applications for schematic capture, mixed-signal simulation, physical layout, parasitic extraction, verification, and waveform analysis, many of which operate on large design databases and generate substantial intermediate data during execution. In addition to the operating system itself, a complete Cadence installation together with process design kits (PDKs), technology libraries, simulation environments, temporary build data, and user project directories can consume several hundred gigabytes of storage. \\
+
+Workstations intended for academic laboratory deployment should therefore prioritize memory capacity, storage performance, multi-core CPU capability, thermal stability, and long-term maintainability over consumer-oriented graphical features. While smaller configurations may support introductory workflows, a poorly provisioned workstation can significantly degrade simulation performance, layout responsiveness, and overall user productivity during large-scale VLSI design tasks.\\
 
 
 The recommended baseline for a Cadence-based EDA workstation is summarized below:
@@ -319,6 +321,7 @@ user files should therefore be backed up before installation begins.
 
 
 \subsection{Disk Partitioning Strategy}
+\label{subsec:disk}
 This is a critical stage in the overall system deployment pipeline and must be approached with precision and caution. Any misconfiguration at this level can result in irreversible data loss, including corruption or removal of existing operating systems such as Windows. \\
 
 Disk partitioning is the process of logically dividing a physical storage device (SSD or HDD) into multiple independent regions, known as partitions. Each partition behaves as a separate storage volume and is assigned a specific role within the operating system architecture. \\
@@ -391,10 +394,49 @@ For dual-booting, we need to create something known as a \textbf{"bootable-drive
 
 For Windows, the most popular choice is Rufus; can be installed here: \url{https://rufus.ie/en/}. If you're on Linux, the most popular choice is Balena Etcher; can be installed here: \url{https://etcher.balena.io/}.\\
 
-\
+\noindent Plug in your USB and make sure it's mounted. Rufus automatically detects it. 
+		\begin{figure}[H]
+			\centering
+			\includegraphics[width=0.5\textwidth]{resources/rufus.png}
+			\caption{\small Example Screenshot of Rufus}
+		\end{figure}
+		This is a screenshot of the Rufus Tool. The \textit{Device} is usually automatically selected as your USB drive; if not, you can manually select it. Set the \textit{Boot selection} to the RHEL 7.9.0 ISO we just downloaded. For a modern workstation, use \textbf{GPT} as the partition scheme and \textbf{UEFI} as the target system. GPT is preferred because current Windows installations and enterprise workstations normally boot in UEFI mode, and using the same boot mode for both Windows and RHEL avoids mixed-mode bootloader issues. Use \textbf{MBR} only if the machine is confirmed to be using legacy BIOS boot. On Windows, this can be checked from \textbf{System Information} by looking at \textbf{BIOS Mode}: choose UEFI if it says \textit{UEFI}, and choose legacy/MBR only if it says \textit{Legacy}. \\
 
-\begin{enumerate}
-	\item Plug in your USB and make sure it's mounted. Rufus automatically detects it. 
-\end{enumerate}
+		For the file system, keep the Rufus default unless there is a specific reason to change it. \textbf{FAT32} is the safest choice for UEFI boot media because it is directly supported by UEFI firmware; \textbf{NTFS} may be used if Rufus requires it because of ISO file-size constraints. Do not choose \textbf{EXT4} for the installation USB, since it is not reliably readable by PC firmware during boot and is meant for Linux partitions after installation. Leave the cluster size at \textbf{Default}, typically \textbf{4096 bytes}, since changing it provides no practical benefit for this installer.\\
+
+
+		Once this completes, the USB is now ready for installation. Reboot your system, and \textbf{\textit{enter the Boot Menu}} by pressing the relevant key. In our case, we're working on an HP workstation, so we're pressing \textbf{F9}.
+
+\subsection{Installation Destination Stage}
+This is the main step for dual booting, and usually the place where most novices mess up. Most of the steps are the same as the virtualization setup. The only thing we're going to have to do differently here is selecting the disk where the base system will be installed. Click on the \textbf{"Installation Destination"} option from the image below, and select the disk we chose in Subsection~\ref{subsec:disk} -- \textbf{\textit{nvme1n1}}
+
+
+	\begin{figure}[H]
+		\centering
+		\fbox{\parbox[c][5cm][c]{0.5\textwidth}{\centering Installation destination screenshot pending}}
+		\caption{\small Installation Media Selection}
+	\end{figure}
+
+
+Once the base system installs, you should remove the installation media and wait for the system to reboot. 
 
 \section{Chapter Summary}
+
+\begin{tcolorbox}
+	\noindent This chapter established the installation baseline for deploying \textbf{RHEL 7.9.0} on a workstation intended for Cadence and other EDA workflows. We first compared the two supported deployment models: virtualization and native dual booting. Virtualization is useful for testing, training, and low-risk experimentation, while native dual booting is the preferred approach for production-style EDA work because it gives RHEL direct access to the workstation hardware, storage, memory, graphics stack, network interface, and any license-related devices.
+
+	\vspace{0.2cm}
+	\noindent We then identified the hardware expectations for a practical EDA workstation, including sufficient RAM, SSD/NVMe storage, CPU capacity, stable graphics support, and reliable network connectivity. The specific HP workstation used in this deployment was documented so that later installation decisions could be tied back to the actual machine configuration. The chapter also covered how to obtain the correct RHEL installation ISO, why the full DVD installer is preferred over the boot ISO, and why RHEL 7.9.0 remains suitable for toolchains that depend on older enterprise Linux compatibility.
+
+	\vspace{0.2cm}
+	\noindent The firmware layer was then reviewed through the distinction between legacy BIOS, UEFI, and Secure Boot. For modern dual-boot workstations, the important rule is to keep the Windows and RHEL installations in the same boot mode. In our case, the system uses \textbf{UEFI}, so the RHEL installation media and final installation should also follow the UEFI path. This avoids mixed bootloader behavior and makes the system easier to recover and maintain.
+
+	\vspace{0.2cm}
+	\noindent For the virtualized setup, the chapter showed how to prepare a RHEL virtual machine using Hyper-V, attach the downloaded ISO, configure the virtual firmware and DVD boot order, disable Secure Boot inside the VM, and complete the base installation. This path provides a convenient sandbox for learning the installer and validating commands before making changes to the physical machine.
+
+	\vspace{0.2cm}
+	\noindent For native dual booting, the chapter introduced the partitioning strategy required for a Linux workstation, including the EFI partition, root partition, and swap partition. It also explained how Windows disk numbering maps to Linux NVMe device names such as \texttt{nvme0n1} and \texttt{nvme1n1}. This mapping is critical because selecting the wrong disk during installation can overwrite the existing operating system or user data.
+
+	\vspace{0.2cm}
+	\noindent Finally, we created the bootable RHEL installation USB using Rufus, selected the correct ISO, and chose settings appropriate for the target workstation: \textbf{GPT} partition scheme, \textbf{UEFI} target system, and the default filesystem and cluster-size options unless Rufus requires otherwise. At the end of the chapter, the machine is ready to boot from the USB installer and proceed to the RHEL installation destination stage, where the correct target disk must be selected carefully before installation begins.
+\end{tcolorbox}
