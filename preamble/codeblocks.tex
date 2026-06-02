@@ -1,0 +1,154 @@
+% ========================================
+% CODE BLOCK FRAMEWORK
+% ========================================
+%
+% This module centralizes all source-code and shell-command presentation.
+% It is intentionally separated from general commands so it can grow into
+% a standalone package-style component later.
+
+% ----------------------------------------
+% Listings language definitions
+% ----------------------------------------
+%
+% Keep language names lowercase so the environment argument maps directly
+% to both the displayed label and the listings language selector.
+
+\lstdefinelanguage{terminal}{
+    morecomment=[l]{\#},
+    alsoletter={-_/.:},
+    sensitive=true
+}
+
+\lstdefinelanguage{csh}{
+    morekeywords={
+        alias,break,breaksw,case,cat,cd,continue,default,echo,else,end,endif,
+        endsw,exit,foreach,if,limit,logout,rehash,repeat,set,setenv,shift,
+        source,switch,then,unalias,unset,unsetenv,while
+    },
+    morecomment=[l]{\#},
+    morestring=[b]",
+    morestring=[b]',
+    sensitive=true
+}
+
+\lstdefinelanguage{verilog}{
+    morekeywords={
+        always,assign,begin,case,default,else,end,endcase,endfunction,
+        endmodule,endtask,for,forever,function,generate,endgenerate,if,
+        initial,input,inout,integer,localparam,module,negedge,output,
+        parameter,posedge,reg,repeat,signed,task,wire
+    },
+    morecomment=[l]{//},
+    morecomment=[s]{/*}{*/},
+    morestring=[b]",
+    sensitive=true
+}
+
+% ----------------------------------------
+% Shared code listing style
+% ----------------------------------------
+%
+% The base style handles typography, wrapping, spacing, and restrained
+% syntax colors. Individual languages can be extended above without
+% changing the codeblock environment itself.
+
+\lstdefinestyle{codeblockbase}{
+    basicstyle=\ttfamily\small\color{codeblocktext},
+    columns=fullflexible,
+    keepspaces=true,
+    breaklines=true,
+    breakatwhitespace=false,
+    showstringspaces=false,
+    upquote=true,
+    tabsize=4,
+    keywordstyle=\bfseries\color{codeblockkeyword},
+    commentstyle=\itshape\color{codeblockcomment},
+    stringstyle=\color{codeblockstring},
+    literate=
+        {\$}{{\textcolor{codeblockvariable}{\$}}}1
+        {0}{{\textcolor{codeblocknumber}{0}}}1
+        {1}{{\textcolor{codeblocknumber}{1}}}1
+        {2}{{\textcolor{codeblocknumber}{2}}}1
+        {3}{{\textcolor{codeblocknumber}{3}}}1
+        {4}{{\textcolor{codeblocknumber}{4}}}1
+        {5}{{\textcolor{codeblocknumber}{5}}}1
+        {6}{{\textcolor{codeblocknumber}{6}}}1
+        {7}{{\textcolor{codeblocknumber}{7}}}1
+        {8}{{\textcolor{codeblocknumber}{8}}}1
+        {9}{{\textcolor{codeblocknumber}{9}}}1
+}
+
+% ----------------------------------------
+% Generic code block environment
+% ----------------------------------------
+%
+% Usage:
+%   \begin{codeblock}{verilog}
+%   module counter;
+%   endmodule
+%   \end{codeblock}
+%
+% The argument selects the listings language and is also shown as a
+% top-right label. The box is breakable for long listings.
+
+\newtcblisting{codeblock}[1]{
+    listing only,
+    breakable,
+    enhanced,
+    arc=2mm,
+    boxrule=0.4pt,
+    colback=codeblockbg,
+    colframe=codeblockframe,
+    colbacktitle=codeblockbg,
+    coltitle=codeblocklabel,
+    fonttitle=\ttfamily\scriptsize,
+    title=\MakeLowercase{#1},
+    halign title=right,
+    left=2.5mm,
+    right=2.5mm,
+    top=1.2mm,
+    bottom=1.8mm,
+    titlerule=0.25pt,
+    toptitle=0.4mm,
+    bottomtitle=0.8mm,
+    listing options={style=codeblockbase, language=#1}
+}
+
+% ----------------------------------------
+% Inline shell command
+% ----------------------------------------
+%
+% Retained as a lightweight inline helper for prose. It uses the same
+% light documentation theme as block listings and visually separates the
+% shell prompt from the command text.
+
+\newcommand{\shellcmd}[1]{%
+    \tcbox[
+        on line,
+        enhanced,
+        arc=1.2mm,
+        boxrule=0.35pt,
+        colback=codeblockbg,
+        colframe=codeblockframe,
+        left=0.8mm,
+        right=0.8mm,
+        top=0.25mm,
+        bottom=0.25mm
+    ]{\ttfamily\small\textcolor{codeblockprompt}{\$}\,\textcolor{codeblocktext}{\detokenize{#1}}}%
+}
+
+% Inline code token for paths, filenames, and identifiers in running text.
+\newcommand{\inlinecode}[1]{%
+    \tcbox[
+        on line,
+        enhanced,
+        arc=1.2mm,
+        boxrule=0.35pt,
+        colback=codeblockbg,
+        colframe=codeblockframe,
+        left=0.8mm,
+        right=0.8mm,
+        top=0.25mm,
+        bottom=0.25mm
+    ]{\ttfamily\small\textcolor{codeblocktext}{\detokenize{#1}}}%
+}
