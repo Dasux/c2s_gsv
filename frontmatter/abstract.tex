@@ -5,23 +5,39 @@
 \addcontentsline{toc}{section}{Abstract}
 
 
-\textit{this requires further enhancement} \\
+This manual presents a beginner-oriented but infrastructure-conscious guide to building and using a
+Cadence-based semiconductor design environment on Red Hat Enterprise Linux. It begins by explaining
+why modern Electronic Design Automation workflows depend on enterprise Linux platforms, why RHEL and
+RHEL-compatible systems are commonly used in academic and industrial VLSI environments, and how a
+laboratory workstation must be planned so that the operating system, user identity, licensing,
+storage, and tool environment remain consistent across machines.\\
 
-  This manual covers the procedures required to deploy, provision, operate, maintain, and recover a RHEL-based semiconductor CAD workstation environment. It is intended to serve as an operational reference for administrators responsible for preparing workstations, installing EDA tools, configuring user access, and maintaining a reliable design environment over time. \\
+\noindent The first part of the document focuses on environment preparation. It covers the practical
+decisions required before installing RHEL, including hardware expectations, virtualization versus
+native dual booting, installation media preparation, UEFI and Secure Boot considerations, disk
+partitioning strategy, and post-installation workstation identity. It then introduces the
+configuration work required for Cadence usage, including directory organization, environment
+variables, C-shell setup, license configuration, installation verification, and tool launch
+procedures. This establishes the workstation as a usable and reproducible EDA platform rather than
+as a generic Linux desktop.\\
 
-  \noindent Specifically, this manual covers the following areas:
-  \begin{itemize}
-    \item Operating system deployment for RHEL workstations, including installation planning and baseline system configuration.
-    \item Workstation provisioning, including package installation, network readiness, storage preparation, and post-installation setup.
-    \item EDA installation workflows for supported semiconductor design tools and their required dependencies.
-    \item Licensing configuration, including license server connectivity, environment variables, and validation steps.
-    \item Shell environments for CAD users, including startup files, module or tool setup scripts, and reproducible environment initialization.
-    \item User management tasks, including account creation, group membership, access control, and basic permission practices.
-    \item Troubleshooting procedures for common operating system, EDA tool, license, shell, and user-access issues.
-    \item Recovery procedures for failed installations, broken environments, workstation rebuilds, and service restoration.
-    \item Maintenance workflows, including updates, backups, configuration audits, cleanup tasks, and periodic validation of the CAD environment.
-  \end{itemize}
+\noindent After the system environment is established, the manual transitions into the digital design
+flow itself. It introduces Verilog, combinational and sequential RTL design, testbench construction,
+simulation, waveform analysis, and coverage analysis using Cadence tools such as Xcelium and IMC.
+The learning path is centered around small laboratory exercises, including adders and counters, so
+that each concept is connected to a concrete design task rather than presented only as theory.\\
 
-  \noindent This manual does not cover semiconductor design methodology, RTL design, verification strategy, physical design theory, circuit design, device modeling, or EDA tool usage from a design-engineering perspective. It also does not define institutional IT policy, network architecture outside the workstation environment, procurement procedures, vendor contract negotiation, or license entitlement management beyond the technical configuration needed for workstation operation.\\
+\noindent The later parts of the document extend the same design from RTL toward implementation. The
+manual outlines logic synthesis using Genus, timing analysis, logical equivalence checking with
+Conformal, and the major stages of physical design using Innovus, including floorplanning, power
+planning, placement, clock tree synthesis, routing, and physical verification. It concludes with
+GDSII generation, tapeout context, the relationship between silicon and PCB-level integration, and a
+complete review of the RTL-to-GDSII flow.\\
+
+\noindent Overall, the intent of this manual is to give new users a coherent view of both sides of an
+EDA laboratory: the infrastructure required to run professional design tools reliably, and the
+step-by-step design flow used to take a simple digital circuit from Verilog source code through
+simulation, coverage, synthesis, verification, physical implementation, and final layout data
+generation.\\
 
 \newpage

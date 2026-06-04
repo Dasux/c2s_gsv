@@ -87,6 +87,53 @@ memory or machine-specific knowledge.
 
 
 \section{Overview of Laboratory Infrastructure}
+
+The laboratory environment should be understood as more than a collection of independent desktop
+computers. In a semiconductor design lab, each workstation is one part of a larger operating
+environment that includes user accounts, network identity, license access, shared design data,
+tool installation paths, and common shell configuration. A student may experience the system as
+``logging into Linux and opening Cadence'', but behind that simple action several infrastructure
+components must work together reliably.\\
+
+At the center of the setup are the \textbf{RHEL workstations}. These are the machines on which
+students and users log in, write Verilog, launch simulations, open waveforms, run synthesis, and
+eventually interact with physical design tools. Each workstation may be installed natively or may
+initially run RHEL inside a virtual machine, but its role is the same: it acts as the user's EDA
+compute endpoint. The workstation must therefore have a predictable hostname, a correctly named
+user account, a stable operating-system baseline, and access to the required Cadence environment.\\
+
+Surrounding the workstations are the shared services that make the lab behave like a coordinated
+engineering environment rather than a set of isolated PCs. The \textbf{license server} controls
+access to Cadence tools; the workstation requests permission from this server whenever a licensed
+tool is launched. Shared storage, when available, provides a common location for project files,
+PDKs, reference scripts, installation archives, or laboratory examples. The network layer connects
+these pieces together through IP addresses, DNS names, hostnames, and routing. If these identities
+are inconsistent, software that depends on licenses, paths, or remote resources may fail even when
+the local installation appears correct.\\
+
+\begin{figure}[H]
+	\centering
+	\begin{tikzpicture}[node distance=1.4cm and 1.6cm]
+		\node[box, minimum width=4.2cm] (user) {Student / User};
+		\node[box, below=of user, minimum width=4.2cm] (host) {RHEL Workstation\\\texttt{user00X} on \texttt{ECE-X}};
+		\node[box, below left=of host, minimum width=3.8cm] (tools) {Cadence Toolchain\\Local or shared install};
+		\node[box, below=of host, minimum width=3.8cm] (license) {License Server\\C2S / Cadence access};
+		\node[box, below right=of host, minimum width=3.8cm] (storage) {Shared Storage\\Projects, PDKs, scripts};
+
+		\draw[arr] (user) -- (host);
+		\draw[arr] (host) -- (tools);
+		\draw[arr] (host) -- (license);
+		\draw[arr] (host) -- (storage);
+	\end{tikzpicture}
+	\caption{High-level view of the laboratory EDA infrastructure}
+\end{figure}
+
+This section is therefore an architectural map, not a detailed installation procedure. It shows
+what the main pieces are and why they must remain consistent. Later chapters configure these
+pieces one by one: the operating system is installed, the workstation identity is assigned, the
+Cadence environment variables are prepared, the license configuration is verified, and the design
+flow is exercised through RTL design, simulation, synthesis, and physical implementation.\\
+
 % ============================================================
 %  Section: Workstation Hardware Requirements and Deployment Constraints
 % ============================================================
@@ -203,5 +250,4 @@ The chapter further justified the adoption of Red Hat Enterprise Linux as the pr
 
 Finally, the chapter discussed the hardware and deployment considerations associated with EDA environments, including storage requirements, memory allocation strategies, and the operational tradeoffs between native and virtualized deployment methodologies. These concepts collectively establish the technical foundation required for the operating system installation and workstation provisioning procedures described in the following chapter. \\
 \end{tcolorbox}
-
 

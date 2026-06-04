@@ -56,30 +56,7 @@ A modern semiconductor CAD workstation intended for full-scale Cadence deploymen
 Workstations intended for academic laboratory deployment should therefore prioritize memory capacity, storage performance, multi-core CPU capability, thermal stability, and long-term maintainability over consumer-oriented graphical features. While smaller configurations may support introductory workflows, a poorly provisioned workstation can significantly degrade simulation performance, layout responsiveness, and overall user productivity during large-scale VLSI design tasks.\\
 
 
-The recommended baseline for a Cadence-based EDA workstation is summarized below:
-
-\begin{itemize}
-	\item \textbf{Processor:} Modern multi-core 64-bit processor with virtualization support; Intel Core i7, AMD Ryzen 7, or higher is recommended, with 8 cores preferred.
-	\item \textbf{Memory:} Minimum 16~GB RAM for basic educational workflows; 32~GB or higher
-	is recommended for large simulations and multi-user laboratory use.
-	\item \textbf{Primary storage:} Minimum 500~GB SSD dedicated to Linux and EDA tools;
-	1~TB NVMe SSD is preferred for better database and simulation performance.
-	\item \textbf{Secondary storage:} Optional high-capacity HDD or NAS-backed storage for
-	project archives, backups, and shared design data.
-	\item \textbf{Graphics:} A discrete GPU is generally not required for most Cadence
-	workflows, but stable OpenGL support is recommended for layout visualization.
-	\item \textbf{Display:} 1920$\times$1080 minimum resolution; dual monitors are strongly
-	recommended for schematic, layout, and waveform analysis.
-	\item \textbf{Network:} Gigabit Ethernet is strongly recommended for license-server
-	communication, shared storage access, and centralized administration.
-	\item \textbf{Firmware:} UEFI-capable system preferred with configurable Secure Boot
-	settings.
-	\item \textbf{Operating system:} RHEL 7.9 or an institution-approved RHEL-compatible
-	enterprise Linux distribution.
-\end{itemize}
-
-\vspace{0.5cm}
-\noindent At the time of writing of this document, the current system available to us had the following specs:
+\noindent At the time of writing of this document, the current system available to us had the following specs: (\textit{so you can make a fair estimate of the requirements based on this})
 
 \begin{table}[H]
 	\centering
@@ -413,7 +390,7 @@ This is the main step for dual booting, and usually the place where most novices
 
 	\begin{figure}[H]
 		\centering
-		\fbox{\parbox[c][5cm][c]{0.5\textwidth}{\centering Installation destination screenshot pending}}
+		\includegraphics[width=0.8\textwidth]{resources/installdest.jpeg}
 		\caption{\small Installation Media Selection}
 	\end{figure}
 
@@ -423,20 +400,9 @@ Once the base system installs, you should remove the installation media and wait
 \section{Chapter Summary}
 
 \begin{tcolorbox}
-	\noindent This chapter established the installation baseline for deploying \textbf{RHEL 7.9.0} on a workstation intended for Cadence and other EDA workflows. We first compared the two supported deployment models: virtualization and native dual booting. Virtualization is useful for testing, training, and low-risk experimentation, while native dual booting is the preferred approach for production-style EDA work because it gives RHEL direct access to the workstation hardware, storage, memory, graphics stack, network interface, and any license-related devices.
+\noindent This chapter established the preparation steps required to deploy RHEL 7.9.0 for Cadence and other EDA workflows. It compared virtualization and native dual booting, noting that virtualization is useful for testing and training, while native installation provides direct access to hardware resources and is therefore preferred for production EDA environments. The chapter also outlined the workstation hardware requirements, documented the target HP workstation, and explained the selection of the RHEL 7.9.0 DVD installation image for compatibility with enterprise toolchains. \\
 
-	\vspace{0.2cm}
-	\noindent We then identified the hardware expectations for a practical EDA workstation, including sufficient RAM, SSD/NVMe storage, CPU capacity, stable graphics support, and reliable network connectivity. The specific HP workstation used in this deployment was documented so that later installation decisions could be tied back to the actual machine configuration. The chapter also covered how to obtain the correct RHEL installation ISO, why the full DVD installer is preferred over the boot ISO, and why RHEL 7.9.0 remains suitable for toolchains that depend on older enterprise Linux compatibility.
+\noindent The chapter then reviewed the firmware and boot environment, including the differences between BIOS, UEFI, and Secure Boot. Emphasis was placed on maintaining a consistent boot mode between Windows and RHEL to avoid bootloader and recovery issues. For virtualized deployments, a Hyper-V-based installation procedure was presented, including virtual machine creation, ISO attachment, firmware configuration, Secure Boot settings, and completion of the base operating system installation. \\
 
-	\vspace{0.2cm}
-	\noindent The firmware layer was then reviewed through the distinction between legacy BIOS, UEFI, and Secure Boot. For modern dual-boot workstations, the important rule is to keep the Windows and RHEL installations in the same boot mode. In our case, the system uses \textbf{UEFI}, so the RHEL installation media and final installation should also follow the UEFI path. This avoids mixed bootloader behavior and makes the system easier to recover and maintain.
-
-	\vspace{0.2cm}
-	\noindent For the virtualized setup, the chapter showed how to prepare a RHEL virtual machine using Hyper-V, attach the downloaded ISO, configure the virtual firmware and DVD boot order, disable Secure Boot inside the VM, and complete the base installation. This path provides a convenient sandbox for learning the installer and validating commands before making changes to the physical machine.
-
-	\vspace{0.2cm}
-	\noindent For native dual booting, the chapter introduced the partitioning strategy required for a Linux workstation, including the EFI partition, root partition, and swap partition. It also explained how Windows disk numbering maps to Linux NVMe device names such as \texttt{nvme0n1} and \texttt{nvme1n1}. This mapping is critical because selecting the wrong disk during installation can overwrite the existing operating system or user data.
-
-	\vspace{0.2cm}
-	\noindent Finally, we created the bootable RHEL installation USB using Rufus, selected the correct ISO, and chose settings appropriate for the target workstation: \textbf{GPT} partition scheme, \textbf{UEFI} target system, and the default filesystem and cluster-size options unless Rufus requires otherwise. At the end of the chapter, the machine is ready to boot from the USB installer and proceed to the RHEL installation destination stage, where the correct target disk must be selected carefully before installation begins.
+\noindent For native dual-boot deployment, the chapter introduced the required Linux partition layout and explained the mapping between Windows disk numbering and Linux NVMe device names to prevent accidental data loss. Finally, a bootable RHEL installation USB was created using Rufus with GPT and UEFI settings appropriate for the target workstation. At this stage, the system is prepared to boot the installer and proceed to disk selection and operating system installation.
 \end{tcolorbox}
