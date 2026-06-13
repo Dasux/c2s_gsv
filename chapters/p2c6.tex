@@ -1,15 +1,583 @@
-\chapter{Combinational Logic Design}
+\chapter{Sequential Logic Design}
 
-\section{Continuous Assignments}
+\section{Why Memory is Required}
+The combinational circuits studied in the previous chapter produce outputs that depend only on the
+present values of their inputs. A multiplexer, Full Adder, or dataflow Boolean network has no
+internal record of what happened earlier. If the same inputs are applied again, the same outputs are
+produced, regardless of the previous input sequence. This property is useful for arithmetic and
+selection logic, but it is not sufficient for digital systems that must remember events, hold data,
+or move through a sequence of states.\\
 
-\section{Dataflow Modeling}
+\noindent Practical digital systems require \textit{state}. A counter must remember its present
+count before it can generate the next count. A register must hold a binary value until the system is
+ready to load a new one. A finite state machine must remember its current state so that it can
+respond correctly to the next input condition. Digital controllers use this stored state to sequence
+operations, enable datapath blocks, and coordinate communication with other modules.\\
 
-\section{Conditional Operators}
+\noindent A circuit that includes memory is called a sequential circuit. Its output may depend on
+both the current inputs and the stored state. The stored state is normally updated at well-defined
+clock events so that the system changes in a controlled and predictable manner. This distinction is
+summarized in Table~\ref{tab:comb_seq_comparison}.
 
-\section{Multiplexers}
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{|p{4cm}|p{5cm}|p{5cm}|}
+\hline
+\textbf{Feature} & \textbf{Combinational Logic} & \textbf{Sequential Logic} \\
+\hline
+Output dependence & Present input values only & Present inputs and stored state \\
+\hline
+Memory & No internal memory & Contains storage elements \\
+\hline
+Typical examples & Adders, multiplexers, decoders & Registers, counters, finite state machines \\
+\hline
+Verilog style & Continuous assignments and combinational blocks & Clocked \inlinecode{always} blocks and non-blocking assignments \\
+\hline
+\end{tabular}
+\caption{Conceptual comparison between combinational and sequential logic.}
+\label{tab:comb_seq_comparison}
+\end{table}
 
-\section{Full Adder Design}
+\begin{figure}[H]
+    \centering
+	\includegraphics[width=0.45\textwidth]{resources/sequential_circuit.png}
+    \caption{Conceptual of Sequential logic with stored state.}
+    \label{fig:comb_vs_seq}
+\end{figure}
 
-\section{Laboratory Exercise}
+\noindent In RTL design, combinational logic and sequential logic are usually used together.
+Combinational logic computes next values, while storage elements capture those values at clock
+events. This chapter introduces the clocked storage elements required to build registers and
+counters, leading directly to the 4-bit synchronous counter exercise.
 
-\subsection*{4-Bit Ripple Carry Adder}
+\section{Clock Signals}
+A clock signal is a periodic digital signal used to coordinate when storage elements update their
+values. In a synchronous digital system, flip-flops and registers usually sample their inputs on a
+specific clock transition. This shared timing reference allows many storage elements to update
+together and makes the behavior of the system easier to simulate, verify, and synthesize.\\
+
+\noindent The \textit{clock period} is the time required for one complete clock cycle. The
+\textit{clock frequency} is the number of cycles per second and is the reciprocal of the period. A
+clock transition from low to high is called a rising edge, while a transition from high to low is
+called a falling edge. In Verilog RTL, these transitions are written using \inlinecode{posedge clk}
+and \inlinecode{negedge clk}.
+
+% TODO: Insert clock waveform diagram
+\begin{figure}[H]
+    \centering
+    \fbox{\parbox{0.84\linewidth}{\centering TODO: Insert clock waveform diagram}}
+    \caption{Clock waveform showing period, frequency, rising edge, and falling edge.}
+    \label{fig:clock_waveform}
+\end{figure}
+
+\noindent A clock can be generated in a testbench using an \inlinecode{always} block and a delay.
+The following example toggles \inlinecode{clk} every 5 ns, producing a clock period of 10 ns.
+
+\begin{codeblock}{verilog}
+`timescale 1ns/1ps
+
+module clock_example_tb;
+    reg clk;
+
+    initial begin
+        clk = 1'b0;
+    end
+
+    always #5 clk = ~clk;
+endmodule
+\end{codeblock}
+
+\noindent This form is intended for simulation testbenches, not for synthesizable design logic. It
+creates a simple periodic signal that can drive clocked modules during verification.\\
+
+\noindent A storage element responds to a clock edge by listing that edge in the sensitivity list of
+an \inlinecode{always} block:
+
+\begin{codeblock}{verilog}
+always @(posedge clk) begin
+    q <= d;
+end
+\end{codeblock}
+
+\noindent The statement above means that \inlinecode{q} is updated only on the rising edge of
+\inlinecode{clk}. If a falling-edge triggered design is required, \inlinecode{negedge clk} is used
+instead. Synchronous systems are preferred in most RTL designs because the state updates occur at
+known clock boundaries, which simplifies simulation, timing analysis, and debugging.
+
+\section{D Flip-Flops}
+A D Flip-Flop is the basic edge-triggered storage element used in synchronous RTL design. It has a
+data input, usually named \inlinecode{D}, a clock input, and an output, usually named
+\inlinecode{Q}. On the active clock edge, the value present at \inlinecode{D} is captured and stored
+at \inlinecode{Q}. Between active clock edges, \inlinecode{Q} holds its previous value even if
+\inlinecode{D} changes.\\
+
+\noindent This behavior is what gives sequential circuits memory. The flip-flop does not
+continuously pass its input to the output. Instead, it samples the input at a clock transition and
+holds that sampled value until the next active edge. Table~\ref{tab:dff_function} summarizes the
+functional behavior for a rising-edge triggered D Flip-Flop.
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{|c|c|c|}
+\hline
+\textbf{Clock Event} & \textbf{D} & \textbf{Next Q} \\
+\hline
+Rising edge & 0 & 0 \\
+\hline
+Rising edge & 1 & 1 \\
+\hline
+No rising edge & X & Previous Q \\
+\hline
+\end{tabular}
+\caption{Functional behavior of a rising-edge triggered D Flip-Flop.}
+\label{tab:dff_function}
+\end{table}
+
+% TODO: Insert D Flip-Flop symbol
+\begin{figure}[H]
+    \centering
+	\includegraphics[width=0.5\textwidth]{resources/dff.png}
+    \caption{D Flip Flop Circuit Diagram}
+    \label{fig:dff_symbol}
+\end{figure}
+
+\noindent The timing behavior should be interpreted carefully in simulation. The input
+\inlinecode{D} may change many times between clock edges, but only the value present at the active
+edge is stored. After the edge, \inlinecode{Q} remains stable until the next active edge, except
+when a reset signal is included and asserted.
+
+\begin{codeblock}{verilog}
+module d_flip_flop(d, clk, q);
+    input d, clk;
+    output reg q;
+
+    always @(posedge clk) begin
+        q <= d;
+    end
+endmodule
+\end{codeblock}
+
+\noindent The \inlinecode{always} block describes logic that is evaluated when the event in its
+sensitivity list occurs. In this example, the event is the rising edge of \inlinecode{clk}. The
+output \inlinecode{q} is declared as \inlinecode{reg} because it is assigned inside a procedural
+block. The assignment operator \inlinecode{<=} is a non-blocking assignment and is the standard form
+used for clocked sequential logic. It allows all registers triggered by the same clock edge to be
+updated together in simulation, matching the behavior expected from synchronous hardware.\\
+
+\noindent Most practical flip-flops include a reset signal so that the circuit can be placed into a
+known state. A synchronous reset is checked inside the clocked block and affects the output only on
+the active clock edge.
+
+\begin{codeblock}{verilog}
+module dff_sync_reset(d, clk, reset, q);
+    input d, clk, reset;
+    output reg q;
+
+    always @(posedge clk) begin
+        if (reset)
+            q <= 1'b0;
+        else
+            q <= d;
+    end
+endmodule
+\end{codeblock}
+
+\noindent In this module, \inlinecode{reset} is sampled on the rising edge of \inlinecode{clk}. If
+\inlinecode{reset} is high at that edge, \inlinecode{q} is cleared to zero. Otherwise,
+\inlinecode{q} captures \inlinecode{d}.\\
+
+\noindent An asynchronous reset is included in the sensitivity list and can clear the output without
+waiting for the next clock edge. This is common when a design must enter a known state immediately
+after reset is asserted.
+
+\begin{codeblock}{verilog}
+module dff_async_reset(d, clk, resetn, q);
+    input d, clk, resetn;
+    output reg q;
+
+    always @(posedge clk or negedge resetn) begin
+        if (!resetn)
+            q <= 1'b0;
+        else
+            q <= d;
+    end
+endmodule
+\end{codeblock}
+
+\noindent The signal \inlinecode{resetn} is active low, as indicated by the suffix \inlinecode{n}
+and by the condition \inlinecode{!resetn}. The block executes either on a rising clock edge or on a
+falling edge of reset. If reset is asserted, the output clears immediately in simulation. If reset
+is not asserted, the flip-flop behaves like the basic clocked D Flip-Flop.
+
+\section{Registers}
+A register is a collection of flip-flops used to store a multi-bit binary value. Each bit of the
+register is held by one flip-flop, and all bits are normally loaded on the same active clock edge.
+For example, a 4-bit register stores four bits, an 8-bit register stores eight bits, and an
+\inlinecode{n}-bit register stores \inlinecode{n} bits.\\
+
+\noindent Registers are used throughout digital systems. They hold operands in datapaths, store
+intermediate results, capture status flags, preserve configuration values, and form the state
+registers of finite state machines. In a synchronous RTL design, registers define the boundaries
+between cycles: combinational logic computes a value during one cycle, and a register captures that
+value at the next active clock edge.
+
+% TODO: Insert register architecture diagram
+\begin{figure}[H]
+    \centering
+	\includegraphics[width=0.55\textwidth]{resources/register_ff.png}
+    \caption{Register architecture showing multiple D Flip-Flops sharing a common clock and reset.}
+    \label{fig:register_architecture}
+\end{figure}
+
+\noindent In Verilog, a register output assigned inside a clocked \inlinecode{always} block is
+declared using \inlinecode{reg}. The width of the stored value is written using a vector range.
+
+\begin{codeblock}{verilog}
+reg [3:0] data_reg;
+reg [7:0] status_reg;
+\end{codeblock}
+
+\noindent A simple 4-bit register with synchronous reset and clocked loading is shown below.
+
+\begin{codeblock}{verilog}
+module register_4bit(d, clk, reset, q);
+    input [3:0] d;
+    input clk, reset;
+    output reg [3:0] q;
+
+    always @(posedge clk) begin
+        if (reset)
+            q <= 4'b0000;
+        else
+            q <= d;
+    end
+endmodule
+\end{codeblock}
+
+\noindent On each rising edge of \inlinecode{clk}, the register either clears to zero or captures
+the four-bit input \inlinecode{d}. The output \inlinecode{q} then holds that value until the next
+clock edge. The same pattern can be extended to wider registers by changing the vector width.
+
+\begin{codeblock}{verilog}
+module register_8bit(d, clk, resetn, q);
+    input [7:0] d;
+    input clk, resetn;
+    output reg [7:0] q;
+
+    always @(posedge clk or negedge resetn) begin
+        if (!resetn)
+            q <= 8'b00000000;
+        else
+            q <= d;
+    end
+endmodule
+\end{codeblock}
+
+\noindent This 8-bit register uses an active-low asynchronous reset. The design style is the same as
+the D Flip-Flop example, but the stored signal is now a vector. In datapath design, such registers
+are commonly placed before and after combinational blocks so that values move through the system one
+clock cycle at a time.
+
+\section{Counters}
+A counter is a sequential circuit that moves through a defined sequence of binary states. The most
+common counter increments by one on each active clock edge, but counters may also decrement, load a
+specified value, enable or disable counting, or count through a custom sequence. Since a counter must
+remember its current count before computing the next count, it is built from registers and
+combinational next-state logic.\\
+
+\noindent Counters are used for timing generation, event counting, address sequencing, loop control,
+clock division, and control-state tracking. A binary up-counter with \inlinecode{n} bits can
+represent \inlinecode{2^n} states. When the counter reaches its maximum value and increments again,
+it wraps around to zero unless additional logic is provided.
+
+\noindent \textbf{Asynchronous Counters}\\
+In an asynchronous counter, also called a ripple counter, only the first flip-flop is driven by the
+external clock. The output of one flip-flop clocks the next stage. This creates a ripple effect:
+later bits change only after earlier bits have toggled. The circuit is simple, but the accumulated
+propagation delay makes timing less predictable, especially as the counter width increases. For this
+reason, asynchronous counters are generally avoided in synthesizable RTL intended for modern
+synchronous digital systems.\\
+
+\noindent \textbf{Synchronous Counters}\\
+In a synchronous counter, all flip-flops share the same clock. The next count value is computed by
+combinational logic and captured by all counter bits on the same active clock edge. This makes the
+timing behavior easier to analyze and verify. Synchronous counters are therefore the preferred style
+for RTL design and are the style used in the following laboratory exercise.\\
+
+\noindent Table~\ref{tab:counter_3bit_sequence} shows the state sequence for a simple 3-bit binary
+up-counter.
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{|c|c|}
+\hline
+\textbf{Present Count} & \textbf{Next Count} \\
+\hline
+000 & 001 \\
+\hline
+001 & 010 \\
+\hline
+010 & 011 \\
+\hline
+011 & 100 \\
+\hline
+100 & 101 \\
+\hline
+101 & 110 \\
+\hline
+110 & 111 \\
+\hline
+111 & 000 \\
+\hline
+\end{tabular}
+\caption{State transition sequence of a 3-bit binary up-counter.}
+\label{tab:counter_3bit_sequence}
+\end{table}
+
+\noindent A basic synchronous counter can be written by registering the count value and adding one
+on each clock edge. The increment operation is a combinational addition whose result is captured by
+the register at the active edge.
+
+\begin{codeblock}{verilog}
+module counter_3bit(clk, reset, count);
+    input clk, reset;
+    output reg [2:0] count;
+
+    always @(posedge clk) begin
+        if (reset)
+            count <= 3'b000;
+        else
+            count <= count + 1'b1;
+    end
+endmodule
+\end{codeblock}
+
+\noindent When \inlinecode{reset} is high at the rising edge of \inlinecode{clk}, the counter
+returns to zero. Otherwise, the current value of \inlinecode{count} is incremented by one. Since
+\inlinecode{count} is three bits wide, the value after \inlinecode{111} wraps around to
+\inlinecode{000}. This wrap-around behavior is a natural result of fixed-width binary arithmetic in
+Verilog.\\
+
+\noindent The next laboratory exercise applies these ideas to a complete 4-bit synchronous counter.
+The design will use a clocked register, reset behavior, and binary increment logic, then verify the
+counting sequence using simulation waveforms in the Cadence environment.
+
+\section{Laboratory Exercise -- 4-Bit Synchronous Counter}
+
+\subsection{Objective}
+The objective of this experiment is to design, simulate, and verify a 4-bit synchronous counter
+using Verilog HDL. The exercise applies the sequential logic concepts introduced in this chapter and
+demonstrates how a clocked RTL block stores and updates state over time.\\
+
+\noindent By completing this exercise, the reader will implement a state-based digital system,
+observe clocked operation, use sequential logic design practices, and verify the counter behavior
+through simulation. The completed design will be suitable for compilation and waveform inspection in
+the Cadence simulation environment.
+
+\subsection{Theory}
+A binary counter advances through a sequence of binary states. For a 4-bit up-counter, the output
+can represent sixteen values, from \inlinecode{0000} to \inlinecode{1111}. On each active clock
+edge, the counter increments by one and stores the new value in its internal register. Since the
+counter must remember its present value before producing the next value, it is a sequential circuit
+rather than a purely combinational circuit.\\
+
+\noindent In a synchronous counter, all flip-flops share the same clock signal. This means that all
+bits of the counter update together on the active clock edge. The count sequence progresses as:
+
+\begin{codeblock}{terminal}
+0000
+0001
+0010
+0011
+...
+1111
+0000
+\end{codeblock}
+
+\noindent After the maximum 4-bit value \inlinecode{1111}, the next increment produces
+\inlinecode{0000}. This is called overflow or wrap-around behavior. It occurs because the counter
+register has a fixed width of four bits; any carry beyond the most significant bit is discarded
+unless it is explicitly captured by additional logic.
+
+\subsection{Counter Architecture}
+The 4-bit synchronous counter contains a clock input, a reset input, and a 4-bit output bus. The
+output bus represents the present count value. Internally, the counter behaves as a 4-bit register
+whose next value is either zero during reset or the present count plus one during normal operation.\\
+
+\noindent All storage bits receive the same clock. On each rising edge of the clock, the counter
+checks the reset signal. If reset is asserted, the count is cleared to \inlinecode{0000}. If reset
+is not asserted, the counter advances to the next binary value.
+
+% TODO: Insert 4-Bit Synchronous Counter block diagram
+\begin{figure}[H]
+    \centering
+    \fbox{\parbox{0.84\linewidth}{\centering TODO: Insert 4-Bit Synchronous Counter block diagram}}
+    \caption{Block diagram of a 4-bit synchronous counter with clock, reset, and count output.}
+    \label{fig:synchronous_counter_block}
+\end{figure}
+
+\noindent Table~\ref{tab:counter_4bit_sequence_lab} shows several successive states of the 4-bit
+counter.
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{|c|c|}
+\hline
+\textbf{Present Count} & \textbf{Next Count} \\
+\hline
+0000 & 0001 \\
+\hline
+0001 & 0010 \\
+\hline
+0010 & 0011 \\
+\hline
+0011 & 0100 \\
+\hline
+0100 & 0101 \\
+\hline
+1110 & 1111 \\
+\hline
+1111 & 0000 \\
+\hline
+\end{tabular}
+\caption{Selected state transitions of a 4-bit synchronous up-counter.}
+\label{tab:counter_4bit_sequence_lab}
+\end{table}
+
+\subsection{Verilog Implementation}
+The RTL implementation uses one clocked \inlinecode{always} block. The counter output is declared
+as a 4-bit \inlinecode{reg} because it is assigned inside the procedural block. Non-blocking
+assignments are used so that the update behavior matches edge-triggered hardware.
+
+\begin{codeblock}{verilog}
+module synchronous_counter_4bit(clk, reset, count);
+    input clk, reset;
+    output reg [3:0] count;
+
+    always @(posedge clk) begin
+        if (reset)
+            count <= 4'b0000;
+        else
+            count <= count + 1'b1;
+    end
+endmodule
+\end{codeblock}
+
+\noindent The module interface contains the clock input \inlinecode{clk}, the reset input
+\inlinecode{reset}, and the 4-bit output \inlinecode{count}. The \inlinecode{always} block executes
+on each rising edge of \inlinecode{clk}. If \inlinecode{reset} is high at that edge, the counter is
+loaded with \inlinecode{0000}. Otherwise, the present value of \inlinecode{count} is incremented by
+one. Since \inlinecode{count} is four bits wide, the increment after \inlinecode{1111} wraps around
+to \inlinecode{0000}.
+
+\subsection{Testbench Development}
+Verification is required to confirm that the counter initializes correctly, increments on clock
+edges, and responds properly to reset. The testbench generates a clock, applies reset, lets the
+counter run for several cycles, applies reset again, and then terminates the simulation.
+
+\begin{codeblock}{verilog}
+`timescale 1ns/1ps
+
+module synchronous_counter_4bit_tb;
+    reg clk, reset;
+    wire [3:0] count;
+
+    synchronous_counter_4bit dut (
+        .clk(clk),
+        .reset(reset),
+        .count(count)
+    );
+
+    initial begin
+        clk = 1'b0;
+    end
+
+    always #5 clk = ~clk;
+
+    initial begin
+        $monitor($time, " reset=%b count=%b", reset, count);
+
+        reset = 1'b1;
+        #12;
+
+        reset = 1'b0;
+        #180;
+
+        reset = 1'b1;
+        #10;
+
+        reset = 1'b0;
+        #40;
+
+        $finish;
+    end
+endmodule
+\end{codeblock}
+
+\noindent The \inlinecode{always #5} statement generates a 10 ns clock period for simulation. The
+first reset interval initializes the counter to zero. After reset is released, the counter advances
+on each rising clock edge. The second reset interval verifies that the counter can be returned to
+\inlinecode{0000} after it has already been counting. The \inlinecode{$monitor} statement prints the
+reset and count values during simulation, while the waveform viewer provides the clearest visual
+confirmation of the state transitions.
+
+\subsection{Simulation Procedure}
+Use the following workflow to perform the experiment in the Cadence simulation environment:
+
+\begin{enumerate}
+    \item Create a new working directory or Cadence project for the synchronous counter experiment.
+    \item Create the Verilog source file containing \inlinecode{synchronous_counter_4bit}.
+    \item Create the testbench file containing \inlinecode{synchronous_counter_4bit_tb}.
+    \item Add both Verilog files to the simulation setup.
+    \item Compile the design and confirm that no syntax or elaboration errors are reported.
+    \item Run the simulation with \inlinecode{synchronous_counter_4bit_tb} as the top-level module.
+    \item Open the waveform viewer and add \inlinecode{clk}, \inlinecode{reset}, and
+    \inlinecode{count}.
+    \item Verify that the counter resets to zero and increments on rising clock edges.
+\end{enumerate}
+
+% TODO: Insert source compilation screenshot
+% TODO: Insert simulation launch screenshot
+% TODO: Insert waveform viewer screenshot
+
+\noindent If the design does not compile, check the module names, port names, and file order. If
+the simulation runs but the waveform is incorrect, inspect the reset polarity, the clock generation
+statement, and the use of non-blocking assignments in the counter.
+
+\subsection{Expected Results}
+During simulation, the counter output should become \inlinecode{0000} whenever reset is asserted and
+a rising clock edge occurs. After reset is released, the output should increment by one on each
+rising edge of \inlinecode{clk}. The sequence should progress through the normal binary count values
+from \inlinecode{0000} to \inlinecode{1111}. After \inlinecode{1111}, the next increment should wrap
+around to \inlinecode{0000}.\\
+
+\noindent The waveform should show that changes in \inlinecode{count} occur only at rising clock
+edges. This confirms that the design is sequential and clock controlled, rather than continuously
+driven like combinational logic.
+
+% TODO: Insert synchronous counter waveform
+\begin{figure}[H]
+    \centering
+    \fbox{\parbox{0.84\linewidth}{\centering TODO: Insert synchronous counter waveform}}
+    \caption{Expected waveform of the 4-bit synchronous counter showing reset behavior, binary incrementing, and wrap-around.}
+    \label{fig:synchronous_counter_waveform}
+\end{figure}
+
+\noindent Correct operation is verified when the waveform shows initialization to
+\inlinecode{0000}, steady binary progression at clock edges, reset returning the count to zero, and
+overflow from \inlinecode{1111} back to \inlinecode{0000}.
+
+\subsection{Conclusion}
+This experiment demonstrated the design and verification of a 4-bit synchronous counter using
+Verilog HDL. The counter was implemented as a clocked sequential circuit using an
+\inlinecode{always @(posedge clk)} block, non-blocking assignments, reset logic, and fixed-width
+binary incrementing.\\
+
+\noindent The simulation verified clocked state transitions, reset behavior, normal counter
+operation, and wrap-around after the maximum 4-bit value. These concepts form the basis for more
+advanced sequential systems, including finite state machines, digital controllers, and processing
+datapaths that will be explored in later chapters.

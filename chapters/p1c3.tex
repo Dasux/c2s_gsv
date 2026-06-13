@@ -41,9 +41,7 @@ This very first priority is ensuring the groupname and username/hostnames are as
 On a fresh install, usually the default group ID is set to \textbf{1000} for the default user. In our case it is \textbf{user003}. You can verify this with the following commands:
 
 \begin{codeblock}{terminal}
-id user003
-whoami
-hostname
+id user003  && whoami && hostname
 \end{codeblock}
 
 
@@ -75,154 +73,8 @@ Traditionally, this process would require the administrator to manually perform 
 
 Performing these operations manually on every cloned workstation is repetitive and increases the likelihood of configuration errors. To streamline the deployment process and ensure consistency across all laboratory systems, these tasks have been automated through a dedicated C-shell (\texttt{csh}) configuration script. The script prompts the administrator for the required workstation-specific parameters and automatically applies the necessary user, group, hostname, and ownership modifications, thereby reducing deployment time and minimizing the risk of human error. \\
 
-The script below solves these issues:
+The full script is present in Appendix~\ref{app:c2s}
 
-\begin{codeblock}{csh}
-#!/bin/csh
-
-echo "========================================"
-echo " Available Login Users"
-echo "========================================"
-
-awk -F: '$3 >= 1000 && $3 < 65534 && $1 != "nobody" {print $1}' /etc/passwd
-
-echo ""
-echo -n "Enter username to rename: "
-set OLD_USER = "$<"
-
-id $OLD_USER >& /dev/null
-if ( $status != 0 ) then
-    echo "Error: User '$OLD_USER' does not exist."
-    exit 1
-endif
-
-echo ""
-echo -n "Enter new username: "
-set NEW_USER = "$<"
-
-echo ""
-echo -n "Enter display name (Full Name): "
-set DISPLAY_NAME = "$<"
-
-echo ""
-echo -n "Enter new hostname: "
-set NEW_HOST = "$<"
-
-set OLD_GROUP = `id -gn $OLD_USER`
-
-echo ""
-echo "========================================"
-echo " Renaming User"
-echo "========================================"
-
-sudo usermod -l $NEW_USER $OLD_USER
-
-if ( $status != 0 ) then
-    echo "Failed to rename user."
-    exit 1
-endif
-
-echo ""
-echo "========================================"
-echo " Updating Home Directory"
-echo "========================================"
-
-sudo usermod -d /home/$NEW_USER -m $NEW_USER
-
-if ( $status != 0 ) then
-    echo "Failed to update home directory."
-    exit 1
-endif
-
-echo ""
-echo "========================================"
-echo " Renaming Primary Group"
-echo "========================================"
-
-sudo groupmod -n $NEW_USER $OLD_GROUP
-
-if ( $status != 0 ) then
-    echo "Failed to rename group."
-    exit 1
-endif
-
-echo ""
-echo "========================================"
-echo " Updating Display Name"
-echo "========================================"
-
-sudo usermod -c "$DISPLAY_NAME" $NEW_USER
-
-if ( $status != 0 ) then
-    echo "Failed to update display name."
-    exit 1
-endif
-
-echo ""
-echo "========================================"
-echo " Fixing Ownership"
-echo "========================================"
-
-sudo chown -R ${NEW_USER}:${NEW_USER} /home/$NEW_USER
-
-if ( -d /home/install ) then
-    sudo chown -R ${NEW_USER}:${NEW_USER} /home/install
-endif
-
-echo ""
-echo "========================================"
-echo " Updating Hostname"
-echo "========================================"
-
-echo "$NEW_HOST" | sudo tee /etc/hostname > /dev/null
-
-sudo sed -i "s/^127\.0\.0\.1.*/127.0.0.1 localhost loghost $NEW_HOST/" /etc/hosts
-
-grep -q "c2s.cdacb.in" /etc/hosts
-if ( $status != 0 ) then
-    echo "14.139.1.126 c2s.cdacb.in" | sudo tee -a /etc/hosts > /dev/null
-endif
-
-grep -q "cadence_server" /etc/hosts
-if ( $status != 0 ) then
-    echo "14.139.1.126 cadence_server" | sudo tee -a /etc/hosts > /dev/null
-endif
-
-sudo hostnamectl set-hostname "$NEW_HOST"
-
-if ( $status != 0 ) then
-    echo "Failed to set hostname."
-    exit 1
-endif
-
-echo ""
-echo "========================================"
-echo " Setup Complete"
-echo "========================================"
-
-echo "Username     : $NEW_USER"
-echo "Display Name : $DISPLAY_NAME"
-echo "Hostname     : $NEW_HOST"
-
-echo ""
-echo "Please log out and log back in."
-echo ""
-
-# For Synopsys tools add to ~/.cshrc if required:
-#
-# setenv SNPSLMD_LICENSE_FILE 27020@14.139.1.126
-# setenv FLEXLM_DIAGNOSTICS 3
-\end{codeblock}
-
-Save this file as \inlinecode{c2ssetup.sh} and then run the following command to make it executable: 
-\begin{codeblock}{terminal}
-sudo chmod +x c2ssetup.sh
-\end{codeblock}
-
-Run the file:
-\begin{codeblock}{terminal}
-./c2ssetup.sh
-\end{codeblock}
 
 \section{Installing and Configuring Cadence}
 
@@ -236,12 +88,331 @@ sudo mkdir -p /home/installs
 
 This is the place where we install all the tools in the Cadence Suite and unzip them. 
 
+For a laboratory deployment, the \inlinecode{/home/installs} directory should be treated as a
+centralized local software repository rather than as an arbitrary extraction location. All Cadence
+releases, auxiliary setup files, and vendor-provided directory trees should be placed under this
+common root so that every workstation follows the same filesystem layout. This standardization is
+important for system imaging, recovery, and later maintenance. If one workstation stores the Cadence
+tree in a different location, the shell startup file, environment variables, license diagnostics, and
+teaching scripts may need to be modified only for that machine, defeating the purpose of a common
+laboratory image.\\
+
+\noindent The Cadence installation archives used for the C2S laboratory setup are obtained from the
+repository provided for the deployment. Administrators should download the packages from the
+following source and preserve the original archive structure supplied there:
+
+\begin{center}
+\small\url{https://entupletech-my.sharepoint.com/personal/cadence_support_entuple_com/_layouts/15/onedrive.aspx?id=%2Fpersonal%2Fcadence%5Fsupport%5Fentuple%5Fcom%2FDocuments%2FDATA%2FCadence%5FRHEL%5F8%5Fversion%2FIndividual%5Flinks&ga=1}
+\end{center}
+
+\noindent In normal workstation preparation, the archive is first downloaded into the user's
+\inlinecode{~/Downloads} directory. This keeps the downloaded source material separate from the
+final installation location and allows the administrator to inspect the archive before extraction.
+After verification, the archive must be extracted directly into \inlinecode{/home/installs/}. No
+additional wrapper directory should be created during extraction. The contents of the archive should
+land directly inside \inlinecode{/home/installs/} so that the Cadence directory hierarchy expected
+by the later environment-variable, C-shell initialization, and license setup steps is preserved.\\
+
+\noindent The exact archive name may differ depending on the release downloaded from the repository.
+The following example therefore uses a clearly marked placeholder for the archive filename:
+
+\begin{codeblock}{terminal}
+cd ~/Downloads
+ls -lh
+
+# Replace this with the actual archive downloaded from the repository.
+ls -lh <CADENCE_ARCHIVE_NAME>
+
+sudo tar -xf <CADENCE_ARCHIVE_NAME> -C /home/installs/
+
+ls -lh /home/installs
+find /home/installs -maxdepth 2 -type d | sort
+\end{codeblock}
+
+\noindent If the downloaded file is provided in a different compressed format, the extraction command
+should be adjusted accordingly while keeping the destination unchanged. For example, a
+\inlinecode{.zip} archive should still be extracted with \inlinecode{/home/installs/} as the target
+directory. The administrative rule remains the same: do not create an extra directory layer between
+\inlinecode{/home/installs/} and the Cadence tree supplied by the archive.\\
+
+\noindent Preserving the original hierarchy is critical because subsequent configuration steps refer
+to predictable paths below \inlinecode{/home/installs}. The \inlinecode{.cshrc} file, Cadence
+environment variables, executable search path, runtime library path, and license diagnostic commands
+all assume that the installation tree has not been rearranged manually. A small change made during
+extraction can later appear as a shell configuration failure or a license startup problem, even
+though the root cause is simply that the expected directory structure was not preserved. For this
+reason, the extraction layout should be verified immediately after unpacking the archive and before
+any environment variables are written.
+
 \subsection{Environment Variables}
+
+Before launching any Cadence tool, the user's shell environment must point to the correct
+installation directories and license server. If a working \inlinecode{.cshrc} file is already present
+and contains the required paths, it does not need to be recreated. The important requirement is that
+the active shell can locate the Cadence executables, libraries, setup files, and license
+configuration.\\
+
+\noindent The following values should be checked for every workstation:
+
+\begin{itemize}
+	\item The Cadence installation root under \inlinecode{/home/installs}
+	\item The executable paths for Cadence tools, usually the \inlinecode{bin} and \inlinecode{tools/bin}
+	      directories inside the Cadence installation
+	\item The runtime library path required by the installed Cadence release
+	\item The license variables, such as \inlinecode{CDS_LIC_FILE} and \inlinecode{LM_LICENSE_FILE},
+	      pointing to the correct license server and port
+	\item Any release-specific setup paths required by the installed Cadence package
+\end{itemize}
+
+\noindent The complete C-shell startup configuration is provided in the appendix:
+\ref{app:csh}. After confirming or updating the startup file, log
+out and log back in, or source the file manually, and verify the active environment using:
+
+\begin{codeblock}{terminal}
+echo $CDS_INST_DIR
+echo $CDS_LIC_FILE
+which genus
+\end{codeblock}
+
+If \inlinecode{which genus} does not return a path under the Cadence installation directory, the
+executable path has not been configured correctly. The environment variables should be corrected
+before continuing with license checks or tool validation.\\
 
 \subsection{C-Shell Configuration}
 
+The C-shell startup file, usually stored as \inlinecode{~/.cshrc}, is one of the most important
+configuration files in a Cadence workstation deployment. It is read whenever an interactive C-shell
+session is started, and it defines the environment that the user receives before any EDA tool is
+launched. In a single-user Linux installation this file may only contain a few aliases or display
+preferences, but in an EDA laboratory it becomes part of the workstation infrastructure. It controls
+which tool release is visible, which license server is contacted, which library paths are searched,
+and whether the shell behaves consistently across cloned systems.\\
+
+\noindent Cadence installations have traditionally relied on C-shell based initialization because many
+vendor-provided setup scripts, examples, and legacy flows assume \inlinecode{csh} or
+\inlinecode{tcsh} syntax. Even when the operating system default shell is Bash, laboratory users may
+still be instructed to start Cadence tools from a C-shell session so that the same environment logic
+is applied on every workstation. This reduces variation between machines and prevents accidental
+differences between users who may otherwise maintain separate Bash, Zsh, or graphical terminal
+profiles. For a C2S laboratory, where the same toolchain must be reproduced across many student
+systems, this consistency is more important than personal shell preference.\\
+
+\noindent The \inlinecode{.cshrc} file should therefore be treated as a controlled configuration file.
+Administrators should avoid scattering Cadence variables across multiple unrelated startup files,
+because such a layout makes troubleshooting difficult after cloning or system repair. A maintainable
+configuration should clearly define the installation root, append the required executable directories
+to the shell path, define any required runtime library locations, and set the licensing variables
+used by Cadence and FlexLM. If several Cadence releases are installed under \inlinecode{/home/installs},
+the selected release should be documented in the file so that future administrators can identify
+which version is active without inspecting every directory manually.\\
+
+\noindent A minimal administrative check is to confirm that the user account is actually reading the
+expected C-shell startup file. This should be tested from the same account that will run the tools,
+not only from the root account, because file ownership, home directory changes, and cloned user
+profiles can easily produce different results for different users. The following commands may be
+used after logging in as the workstation user:
+
+\begin{codeblock}{terminal}
+echo $shell
+ls -l ~/.cshrc
+source ~/.cshrc
+rehash
+\end{codeblock}
+
+\noindent The \inlinecode{source} command reloads the startup file in the current shell, while
+\inlinecode{rehash} refreshes the C-shell command lookup table after new executable directories have
+been added to the path. This is useful during installation because the administrator can edit the
+startup file and test it immediately without logging out after every change. However, final
+validation should still be performed in a new login session, because that confirms that the settings
+are loaded automatically and do not depend on manual commands typed during installation.\\
+
+\noindent The C-shell configuration should not contain workstation-specific values unless those values
+are intentionally different for each machine. The tool installation path and license configuration
+should normally be identical across all cloned workstations, while the username and hostname are
+handled separately during the system identity configuration described earlier in this chapter. This
+separation improves maintainability: a cloned machine can receive its own hostname and user identity
+without requiring a different Cadence startup file for every seat in the laboratory.
+
 \subsection{License Configuration}
+
+Cadence tools are protected by network licensing, commonly implemented through the FlexLM licensing
+system. In this model, the workstation does not independently decide whether a tool may run. Instead,
+when a Cadence executable starts, it contacts the configured license server and requests the required
+license feature. The server checks whether the feature exists, whether the request is allowed, and
+whether enough license tokens are available. Only after this exchange succeeds does the tool proceed
+to the normal graphical or command-line startup sequence.\\
+
+\noindent License configuration is therefore a core infrastructure dependency, not a cosmetic
+environment setting. A workstation may have a complete Cadence installation and a correct executable
+path, but the tools will still fail to launch if the license variable is missing, the server hostname
+cannot be resolved, the port is incorrect, or the network path to the server is unavailable. In a
+teaching laboratory this can affect many users at the same time, so license settings should be kept
+centralized, documented, and reproducible. The same license configuration should be applied to every
+workstation unless the C2S license documentation explicitly requires separate values for separate
+systems.\\
+
+\noindent The two variables most commonly involved are \inlinecode{CDS_LIC_FILE} and
+\inlinecode{LM_LICENSE_FILE}. The Cadence-specific variable points Cadence tools to the license
+source, while \inlinecode{LM_LICENSE_FILE} is understood by FlexLM-based utilities and may also be
+used by other licensed software. The value normally follows the form
+\inlinecode{PORT@LICENSE_SERVER}, where \inlinecode{PORT} is the FlexLM server port and
+\inlinecode{LICENSE_SERVER} is the hostname or IP address of the license server. The actual value
+must be taken from the C2S license documentation or from the laboratory license administrator. If
+the value is not yet known during documentation preparation, it should be left as a clearly marked
+placeholder rather than replaced by an assumed address:
+
+\begin{codeblock}{csh}
+setenv CDS_LIC_FILE <PORT>@<LICENSE_SERVER_HOSTNAME>
+setenv LM_LICENSE_FILE $CDS_LIC_FILE
+\end{codeblock}
+
+\noindent Hostname resolution should be checked before blaming the Cadence installation itself. If
+the license variable uses a hostname, that hostname must resolve through DNS or through a controlled
+entry in \inlinecode{/etc/hosts}. If the laboratory network is segmented, administrators should also
+confirm that the workstation can reach the license server from the student VLAN or laboratory subnet.
+Using an IP address can avoid name resolution problems, but it also makes future server migration
+less transparent. For maintainability, a stable hostname is usually preferable when the network
+infrastructure supports it correctly.\\
+
+\noindent Licensing failures commonly occur because the startup file was not sourced, the wrong shell
+was used, the license server name was mistyped, the FlexLM port was changed, or a firewall blocked
+the connection. Another frequent cause is a mismatch between the installed Cadence release and the
+features available in the license file. For this reason, license validation should be performed after
+every installation, after every workstation clone, and after any license server maintenance window.
+The following checks are useful when the FlexLM utility is available in the active environment:
+
+\begin{codeblock}{terminal}
+echo $CDS_LIC_FILE
+echo $LM_LICENSE_FILE
+lmutil lmstat -a -c $CDS_LIC_FILE
+\end{codeblock}
+
+\noindent If \inlinecode{lmutil} is not available directly in the shell path, the administrator should
+use the copy provided by the installed Cadence release, or replace the command with the site-approved
+license diagnostic utility. The important point is not the exact utility name, but the validation
+principle: the workstation must be able to contact the same license source that Cadence will use at
+runtime.
 
 \subsection{Verifying Installation}
 
+Verification should be performed systematically before a workstation is released for student use.
+The goal is not merely to prove that one command opens once, but to confirm that the deployed machine
+matches the intended laboratory baseline. This includes the operating system identity, the Cadence
+installation directory, the C-shell startup configuration, the executable search path, the runtime
+library environment, and access to the license server. A structured validation step is especially
+important after Clonezilla deployment, because cloned machines can inherit paths and user
+configuration from the source image while still requiring workstation-specific identity changes.\\
+
+\noindent The first validation step is to check that the environment visible to the user is the same
+environment described in the configuration files. This must be done from a fresh terminal session as
+the intended user account. Administrators should avoid relying only on commands run immediately
+after manual sourcing, because that can hide startup errors that will reappear when students log in
+normally. The following commands provide a basic view of the active shell and Cadence environment:
+
+\begin{codeblock}{terminal}
+whoami
+hostname
+echo $shell
+echo $CDS_INST_DIR
+echo $CDS_LIC_FILE
+echo $LM_LICENSE_FILE
+\end{codeblock}
+
+\noindent The values should match the workstation identity convention and the Cadence configuration
+approved for the laboratory. Empty output for a required variable usually indicates that the startup
+file was not read, the user is not running the expected shell, or the variable was defined in a file
+that is not part of the current login sequence. Incorrect output is more serious than empty output,
+because it may point the user to an outdated release or to an obsolete license server without making
+the failure obvious at first.\\
+
+\noindent The next step is to confirm executable visibility. Cadence tools are large application
+suites, and their front-end commands must be reachable through the C-shell path. If the shell cannot
+find the executable, the installation may still exist on disk, but the user environment is not ready.
+The administrator should check both command discovery and version reporting where the tool supports
+it:
+
+\begin{codeblock}{terminal}
+which genus
+which xrun
+which innovus
+
+genus -version
+xrun -version
+innovus -version
+\end{codeblock}
+
+\noindent Not every laboratory installation will include every Cadence product. A missing command is
+therefore not automatically an error if that product was not installed or was not included in the
+C2S entitlement. However, every tool expected for the course flow should resolve to a path under the
+approved Cadence installation directory, and its version should correspond to the documented release.
+If different machines report different versions, the clone image or startup file should be reviewed
+before the laboratory is used for instruction.\\
+
+\noindent License access should be validated after executable visibility, because a tool may be
+installed correctly but still fail during feature checkout. If FlexLM diagnostics are available, the
+license server can be queried before opening a full graphical application:
+
+\begin{codeblock}{terminal}
+lmutil lmstat -a -c $CDS_LIC_FILE
+\end{codeblock}
+
+\noindent Finally, the administrator should perform a practical launch test using at least one
+graphical tool and one command-line or batch-capable tool from the expected design flow. This catches
+problems that simple path checks may miss, such as missing shared libraries, display forwarding
+issues, incompatible system packages, or permission problems in the user's working directory. The
+workstation should only be considered ready when these checks succeed from the normal student
+account without requiring root privileges.
+
 \subsection{Launching Cadence Tools}
+
+Cadence tools should be launched from a prepared user environment, not from an arbitrary terminal
+state. In normal laboratory use this means that the user logs in to the workstation, opens a
+C-shell-compatible terminal session, and starts the required tool from a project working directory.
+The working directory matters because many Cadence applications create local run files, logs, lock
+files, simulation outputs, or design database directories during startup. Launching tools from a
+temporary or root-owned directory can create permission problems that are difficult for students to
+diagnose later.\\
+
+\noindent During the first execution, the tool performs several checks before the user reaches the
+main interface. It reads the shell environment, locates the installation tree, loads shared
+libraries, checks release-specific setup files, contacts the license server, and initializes user
+configuration data. A delay during the first launch is therefore not unusual, especially on a newly
+cloned workstation or after a user profile has been created. However, repeated failures at this stage
+usually indicate an infrastructure problem: an incorrect path, a missing library, an unavailable
+license feature, or an environment mismatch between the selected release and the active shell.\\
+
+\noindent A typical launch test for the synthesis environment is performed with
+\inlinecode{genus}. The administrator should run it from a writable directory owned by the user,
+observe whether the application starts without license errors, and then close it normally after the
+startup sequence is complete:
+
+\begin{codeblock}{terminal}
+mkdir -p ~/cadence_test
+cd ~/cadence_test
+genus &
+\end{codeblock}
+
+\noindent Successful startup confirms more than the presence of the \inlinecode{genus} executable.
+It confirms that the shell path is active, the required runtime libraries can be loaded, the license
+server is reachable, and the release selected in the shell matches the installation tree on disk. If
+the tool reports license warnings or missing setup files, the workstation should not be handed over
+as ready until those messages are understood. Warning messages that appear harmless during
+installation often become recurring support issues once a full class begins using the machines.\\
+
+\noindent Digital design and implementation tools may also be checked from the command line. Version
+queries are useful for confirming the active release without starting a full project, while a later
+course-specific flow can be used for deeper validation. The following commands provide a lightweight
+launch-level check for commonly used Cadence tools, subject to the products actually installed under
+the C2S deployment:
+
+\begin{codeblock}{terminal}
+xrun -version
+genus -version
+innovus -version
+\end{codeblock}
+
+\noindent A successful launch or version response should be recorded as part of the workstation
+handover checklist. In a laboratory setting, this record helps distinguish between installation
+problems and later user-level project errors. Once the major tools start from the normal user
+account, the expected license source is reachable, and the reported versions match the documented
+release, the Cadence environment can be considered ready for instructional use.

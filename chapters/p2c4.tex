@@ -1,0 +1,386 @@
+\chapter{Introduction to Verilog}
+
+\section{Why Hardware Description Languages Exist}
+
+As digital systems grew beyond small collections of gates, schematic-only design became unsuitable
+for serious integrated-circuit development. A modern chip must be described, simulated, revised, and
+verified long before it reaches physical implementation, and this requires a representation that EDA
+tools can process consistently. \textbf{Hardware Description Languages (HDLs)} provide this
+representation. They allow engineers to describe logic, registers, interconnections, timing intent,
+and hierarchy in text, while still representing hardware rather than software instructions executed
+by a processor.\\
+
+\noindent \textbf{Verilog} is one of the primary HDLs used for digital design and verification. It can
+describe simple combinational circuits, sequential elements, counters, multiplexers, and complete
+RTL blocks that later pass through simulation, synthesis, and implementation. Its main value in this
+flow is that the same design can be organized hierarchically, tested before fabrication, and reused
+across larger systems. This chapter introduces the basic Verilog program structure, modules, ports,
+data types, constants, and operators needed for the RTL design and verification work used in later
+chapters.\\
+
+
+\section{Verilog Program Structure}
+
+A Verilog source file is organized around one or more modules, and each module acts as a self-contained
+hardware block with its own ports, declarations, and internal logic. This structure is not a stylistic
+convention; it is what allows EDA tools to parse the design, elaborate the hierarchy, and determine
+which parts of the description are meant to behave as combinational logic, sequential logic, or
+hierarchical instances of other blocks. A complete Verilog design therefore begins with the module
+header, continues with the declaration of ports and internal objects, and ends with one or more
+behavioral or structural descriptions that define how the block operates.\\
+
+\noindent The general pattern is consistent across small laboratory examples and larger RTL blocks.
+The module header names the design unit and lists its external interface. The body then defines
+whether each port is an input, output, or inout, assigns widths where required, declares nets and
+variables, and introduces continuous assignments or procedural blocks. A module may also contain
+parameters, submodule instances, tasks, functions, and generate constructs when the design grows in
+complexity. The following skeleton shows the layout used throughout this manual:
+
+\begin{codeblock}{verilog}
+module module_name (port_list);
+    // port directions and widths
+    // internal declarations
+    // continuous assignments
+    // procedural blocks
+endmodule
+\end{codeblock}
+
+\noindent In practice, this structure allows the same description to be read by both simulator and
+synthesis tools. Simulation uses the procedural and concurrent statements to model behavior over
+time, while synthesis extracts the logic implied by the supported constructs. For that reason, the
+organization of the code matters as much as the syntax itself. A clean module layout makes a design
+easier to review, easier to debug, and easier to hand over to another engineer or laboratory
+administrator later in the flow.
+
+\section{Modules}
+
+The module is the basic unit of composition in Verilog. Every hardware description is built from one
+or more modules, whether the design represents a simple gate-level block or a complete subsystem with
+multiple submodules. A module may be reused many times within a larger design, which is why it is
+useful to think of it as a hardware component rather than as a software procedure. When one module
+instantiates another, the relationship is fixed at elaboration time; the resulting hierarchy mirrors
+the structure of the hardware that will be simulated or synthesized.\\
+
+\noindent The module body can include instances of other modules, primitive gates, continuous
+assignments, tasks, functions, and procedural blocks. A small module may contain only a few lines of
+declaration and a single assignment, while a larger module may include several nested blocks and many
+internal signals. The important point is that the interface remains explicit. For example, a full
+adder can be described with only a few statements:
+
+\begin{codeblock}{verilog}
+module full_adder(A, B, Cin, S, Cout);
+    input A, B, Cin;
+    output S, Cout;
+
+    assign {Cout, S} = A + B + Cin;
+endmodule
+\end{codeblock}
+
+\noindent The same block may later be reused as part of a larger arithmetic unit without changing its
+interface. This reuse is one of the practical reasons Verilog became central to RTL design. It allows
+an engineer to define a small verified building block once, then connect that block into a wider
+system by instantiating it repeatedly. The module boundary therefore serves both as a design boundary
+and as a documentation boundary.
+
+\section{Ports}
+
+Ports define the external interface of a module. They are the connection points through which the
+module exchanges signals with the rest of the design, and they must be declared explicitly as input,
+output, or inout. A port list alone is not enough to define the signal type; the direction and, when
+necessary, the data type and bit range must also be stated inside the module body. In many cases a
+port is treated as a wire by default, but wider buses and registered outputs require additional
+declaration.\\
+
+\noindent The port list becomes especially important when a module is parameterized. Widths can be
+described using parameters so that the same source file may be reused for different data widths
+without rewriting the logic. This is common in laboratory designs, where a small example may later be
+scaled to a wider bus for experimentation. The syntax below shows the basic pattern:
+
+\begin{codeblock}{verilog}
+module module_name
+    #(parameter WORD = 32)
+    (addr, sum, a, b, sel, data_bus);
+
+    input  [WORD-1:0] addr;
+    output reg signed [32:1] sum;
+    input  a, b, sel;
+    input  [0:15] data_bus;
+endmodule
+\end{codeblock}
+
+\noindent The declaration order matters when the design is read by tools and by human reviewers.
+Signals in the port list should be easy to map back to the declarations, and the direction of each
+signal should be obvious before the body of the module is examined. A clear port definition is one of
+the simplest ways to keep a Verilog project maintainable as it grows.
+
+\section{Nets and Registers}
+
+Verilog separates physical connections from storage elements. Nets, such as \inlinecode{wire}, are
+used to model connections between components, while registers such as \inlinecode{reg} are used when
+the value must be held or assigned inside procedural code. This distinction is important because it
+reflects the hardware interpretation of the source. A net is driven by some source and used as a
+connection in the design, whereas a register is typically updated by an \inlinecode{always} or
+\inlinecode{initial} block during simulation.\\
+
+\noindent Verilog also models four-valued logic, which is necessary when a design is not fully driven
+or when a signal cannot yet be resolved during simulation. The values are \inlinecode{0},
+\inlinecode{1}, \inlinecode{x}, and \inlinecode{z}. The \inlinecode{z} state represents a high-
+impedance or undriven condition, while \inlinecode{x} represents an unknown or unresolved value.
+These states are useful when checking reset behavior, tri-state buses, or incomplete initialization.
+The following examples show the basic declaration style used in practice:
+
+\begin{codeblock}{verilog}
+wire A, X, Y, Z, Cin, Cout;
+wire [3:0] B, S;
+wire [15:0] C;
+
+reg q_out;
+reg [7:0] counter;
+\end{codeblock}
+
+\noindent Nets are not assigned inside procedural blocks, and registers are not used as direct
+continuous-connection targets in the same way as a wire. That separation keeps the model consistent
+with the intended hardware behavior and helps the simulator distinguish between continuous hardware
+connections and values that are updated under procedural control.
+
+\section{Numbers and Constants}
+
+Verilog numbers are written using a compact notation that encodes the size, radix, and value in a
+single literal. The general form is \inlinecode{<size>'<radix><value>}, where the radix indicates
+binary, octal, decimal, or hexadecimal representation. This syntax is used throughout RTL coding
+because it makes the intended width explicit and avoids ambiguity about sign extension or default
+integer size. The standard radix characters are \inlinecode{b}, \inlinecode{o}, \inlinecode{d}, and
+\inlinecode{h}.\\
+
+\noindent Sized constants are preferable whenever the width matters, especially in module interfaces,
+state machines, and testbench stimulus. Verilog also allows unknown and high-impedance digits inside
+constants, which is useful when modeling incomplete bus values or uninitialized conditions during
+simulation. The examples below match the style used in the notes:
+
+\begin{codeblock}{verilog}
+4'b1010
+8'h3F
+16'd255
+4'b01xx
+1'bz
+\end{codeblock}
+
+\noindent Constants are not simply a syntactic detail. In a hardware description, they determine how
+the simulator interprets a value and how a synthesis tool treats a mask, width, or reset state. A
+value written without an explicit size may behave differently from the same value written with a
+fixed bit width, so laboratory code should state widths clearly whenever the design depends on them.
+
+\section{Operators}
+
+Verilog operators follow the same broad categories used in digital logic, but they are applied
+directly to hardware signals rather than to software variables. Bitwise operators act on individual
+bits, logical operators act on the truth value of an expression, shift operators move data left or
+right, and the conditional operator provides a compact form of multiplexing. Understanding this
+division is essential because a mistake in operator choice can change the synthesized hardware even
+when the simulation appears to run.\\
+
+\noindent Bitwise operators operate on each bit of their operands. Unary reduction operators, by
+contrast, collapse a vector into a single result by combining all bits together. Logical operators
+return a true or false result and are typically used in conditions. The shift operators
+\inlinecode{<<} and \inlinecode{>>} move the bit pattern by a fixed number of positions, while the
+conditional operator \inlinecode{?:} is commonly used to express a multiplexer in a compact form.
+The basic usage is illustrated below:
+
+\begin{codeblock}{verilog}
+assign A = X | (Y & ~Z);
+assign B = &data_bus;
+assign C = |mask_bus;
+assign D = sel ? in1 : in0;
+
+a = 4'b1010;
+d = a >> 2;
+c = a << 1;
+\end{codeblock}
+
+\noindent In laboratory RTL, these operators are used constantly because they map directly onto the
+hardware view of the design. A conditional expression often describes the same logic that would be
+drawn as a multiplexer in a schematic, while bitwise and reduction operators are useful for masks,
+parity checks, and grouped control logic. The operator chosen in the source should therefore match
+the intended hardware structure, not merely the result visible in a quick simulation.
+
+\section{Laboratory Exercise -- Half Adder}
+
+\subsection{Objective}
+The purpose of this exercise is to design, simulate, and verify a Half Adder using Verilog HDL. The
+exercise introduces a complete but minimal digital design flow, beginning with the RTL description
+and continuing through testbench development, compilation, simulation, and waveform inspection in
+the Cadence environment.\\
+
+\noindent A Half Adder is a suitable starting point because it is small enough to understand in a
+single session, yet complete enough to demonstrate the relationship between Boolean equations,
+Verilog code, stimulus generation, and simulation results. The same workflow used here will be used
+again in later chapters for larger combinational and sequential designs.
+
+\subsection{Theory}
+A Half Adder is a combinational circuit that adds two one-bit inputs, \inlinecode{A} and
+\inlinecode{B}, and produces two one-bit outputs: the \textit{Sum} and the \textit{Carry}. The Sum
+bit represents the least significant result of the addition, while the Carry bit indicates whether
+both inputs were high at the same time. Since the circuit has no storage element, its outputs depend
+only on the current input combination.\\
+
+
+\begin{wrapfigure}{r}{0.3\textwidth}
+	\centering
+	\includegraphics[width=0.35\textwidth]{resources/half_adder.jpg}
+\end{wrapfigure}
+\noindent In Boolean form, the Half Adder is expressed as:
+\[
+\text{Sum} = A \oplus B
+\]
+\[
+\text{Carry} = A \cdot B
+\]
+
+\noindent The Sum output is obtained using the exclusive-OR operation because the result is high
+only when exactly one input is high. The Carry output is obtained using the AND operation because a
+carry occurs only when both inputs are asserted simultaneously.
+
+
+\subsection{Truth Table}
+The truth table below lists all possible input combinations for a Half Adder and the corresponding
+Sum and Carry outputs. This table serves as the reference against which the Verilog model and the
+testbench results are checked.
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{|c|c|c|c|}
+\hline
+\textbf{A} & \textbf{B} & \textbf{Sum} & \textbf{Carry} \\
+\hline
+0 & 0 & 0 & 0 \\
+\hline
+0 & 1 & 1 & 0 \\
+\hline
+1 & 0 & 1 & 0 \\
+\hline
+1 & 1 & 0 & 1 \\
+\hline
+\end{tabular}
+\caption{Truth table of the Half Adder.}
+\label{tab:half_adder_truth}
+\end{table}
+
+\subsection{Verilog Implementation}
+The Verilog description of a Half Adder is intentionally short, but it should still follow the same
+discipline used for larger RTL blocks. The module name identifies the design unit, the port list
+exposes the external interface, and the continuous assignments map directly to the Boolean
+expressions derived from the truth table. This makes the source easy to read and easy to verify
+against the expected hardware behavior.\\
+
+\begin{codeblock}{verilog}
+module half_adder(A, B, Sum, Carry);
+    input A, B;
+    output Sum, Carry;
+
+    assign Sum = A ^ B;
+    assign Carry = A & B;
+endmodule
+\end{codeblock}
+
+\noindent The module declaration names the design and defines the port order. The input declarations
+identify the two one-bit operands. The output declarations identify the result signals that will be
+driven by the logic inside the module. The \inlinecode{assign} statement for \inlinecode{Sum}
+implements the exclusive-OR function, while the \inlinecode{assign} statement for \inlinecode{Carry}
+implements the AND function. The \inlinecode{endmodule} keyword closes the design unit and allows it
+to be instantiated inside a testbench or a larger circuit.
+
+\subsection{Testbench}
+A testbench is required because the design itself does not generate stimuli. The Half Adder must be
+exercised with all valid input combinations so that the simulation can confirm both outputs against
+the truth table. In a laboratory setting, the testbench also establishes a repeatable procedure for
+running the design inside the simulator, which is essential when the same flow must later be repeated
+for larger circuits.\\
+
+\begin{codeblock}{verilog}
+`timescale 1ns/1ps
+
+module half_adder_tb;
+    reg A, B;
+    wire Sum, Carry;
+
+    half_adder dut (
+        .A(A),
+        .B(B),
+        .Sum(Sum),
+        .Carry(Carry)
+    );
+
+    initial begin
+        $monitor($time, " A=%b B=%b Sum=%b Carry=%b", A, B, Sum, Carry);
+
+        A = 0; B = 0; #10;
+        A = 0; B = 1; #10;
+        A = 1; B = 0; #10;
+        A = 1; B = 1; #10;
+
+        $finish;
+    end
+endmodule
+\end{codeblock}
+
+\noindent The stimulus sequence applies each of the four possible input combinations in turn, with a
+short delay between each state so that the waveform viewer can capture the transitions clearly. The
+\inlinecode{$monitor} statement records the active values during simulation, making it easy to compare
+the observed output against the truth table. Once the final input combination has been applied, the
+simulation terminates with \inlinecode{$finish}.
+
+\subsection{Simulation Procedure}
+The simulation workflow should be treated as a standard laboratory procedure rather than as an ad hoc
+sequence of tool clicks. A clean project directory, a correct set of source files, and a known
+simulation entry point make it much easier to reproduce results later. The exact window layout may
+vary slightly between Cadence releases, but the workflow remains the same.\\
+
+\begin{enumerate}
+    \item Create a new Cadence project or working directory for the exercise.
+    \item Add the design file containing the Half Adder RTL description.
+    \item Add the testbench file and ensure it references the design module correctly.
+    \item Compile the design and confirm that no syntax errors are reported.
+    \item Run the simulation and allow the testbench to apply all input combinations.
+    \item Open the waveform viewer and inspect the Sum and Carry signals.
+    \item Save the simulation session if the laboratory workflow requires a record of the results.
+\end{enumerate}
+
+% TODO: Insert compilation screenshot
+% TODO: Insert waveform viewer screenshot
+
+\noindent In practice, the compilation stage confirms that both files are readable by the simulator
+and that the module names, port names, and signal declarations agree. The simulation stage then
+checks that the testbench drives the design in the intended order. The waveform viewer is used at the
+end because it provides the clearest visual confirmation that the output transitions match the truth
+table.
+
+\subsection{Expected Results}
+The expected waveform is straightforward. When both inputs are low, both outputs remain low. When
+exactly one input is high, the Sum output becomes high while the Carry output remains low. When both
+inputs are high, the Sum output returns low and the Carry output becomes high. This is the defining
+behavior of a Half Adder and should be visible directly in the waveform viewer.\\
+
+\begin{figure}[H]
+    \centering
+    \fbox{\parbox{0.82\linewidth}{\centering TODO: Insert Half Adder waveform screenshot}}
+    \caption{Expected Half Adder waveform showing Sum and Carry behavior for all input combinations.}
+    \label{fig:half_adder_waveform}
+\end{figure}
+
+\noindent The waveform should therefore show \inlinecode{Sum} following the XOR of \inlinecode{A} and
+\inlinecode{B}, while \inlinecode{Carry} follows the AND of the same inputs. If the observed outputs
+do not match the truth table, the design file and testbench should be checked first, followed by the
+simulation setup and signal connections.
+
+\subsection{Conclusion}
+This exercise demonstrates the complete Verilog verification flow on a simple combinational circuit.
+The Half Adder is small, but it introduces the essential sequence used throughout digital design:
+derive the logic, write the RTL, apply test stimulus, simulate the model, and verify the waveform
+against the expected behavior. That procedure will be reused in later chapters when the designs
+become larger and the simulation setup becomes more involved.\\
+
+\noindent By completing the exercise, the reader gains a practical starting point for working with
+Cadence tools in a reproducible laboratory environment. The same method of checking the Boolean
+equations, validating the truth table, and confirming the waveform response will remain useful when
+the designs move from simple combinational logic to sequential circuits and larger RTL blocks.

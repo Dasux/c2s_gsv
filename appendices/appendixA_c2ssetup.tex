@@ -1,0 +1,150 @@
+\chapter{c2ssetup Script for Automating User/Hostname Config}
+\label{app:c2s}
+
+\begin{codeblock}{csh}
+#!/bin/csh
+
+echo "========================================"
+echo " Available Login Users"
+echo "========================================"
+
+awk -F: '$3 >= 1000 && $3 < 65534 && $1 != "nobody" {print $1}' /etc/passwd
+
+echo ""
+echo -n "Enter username to rename: "
+set OLD_USER = "$<"
+
+id $OLD_USER >& /dev/null
+if ( $status != 0 ) then
+    echo "Error: User '$OLD_USER' does not exist."
+    exit 1
+endif
+
+echo ""
+echo -n "Enter new username: "
+set NEW_USER = "$<"
+
+echo ""
+echo -n "Enter display name (Full Name): "
+set DISPLAY_NAME = "$<"
+
+echo ""
+echo -n "Enter new hostname: "
+set NEW_HOST = "$<"
+
+set OLD_GROUP = `id -gn $OLD_USER`
+
+echo ""
+echo "========================================"
+echo " Renaming User"
+echo "========================================"
+
+sudo usermod -l $NEW_USER $OLD_USER
+
+if ( $status != 0 ) then
+    echo "Failed to rename user."
+    exit 1
+endif
+
+echo ""
+echo "========================================"
+echo " Updating Home Directory"
+echo "========================================"
+
+sudo usermod -d /home/$NEW_USER -m $NEW_USER
+
+if ( $status != 0 ) then
+    echo "Failed to update home directory."
+    exit 1
+endif
+
+echo ""
+echo "========================================"
+echo " Renaming Primary Group"
+echo "========================================"
+
+sudo groupmod -n $NEW_USER $OLD_GROUP
+
+if ( $status != 0 ) then
+    echo "Failed to rename group."
+    exit 1
+endif
+
+echo ""
+echo "========================================"
+echo " Updating Display Name"
+echo "========================================"
+
+sudo usermod -c "$DISPLAY_NAME" $NEW_USER
+
+if ( $status != 0 ) then
+    echo "Failed to update display name."
+    exit 1
+endif
+
+echo ""
+echo "========================================"
+echo " Fixing Ownership"
+echo "========================================"
+
+sudo chown -R ${NEW_USER}:${NEW_USER} /home/$NEW_USER
+
+if ( -d /home/install ) then
+    sudo chown -R ${NEW_USER}:${NEW_USER} /home/install
+endif
+
+echo ""
+echo "========================================"
+echo " Updating Hostname"
+echo "========================================"
+
+echo "$NEW_HOST" | sudo tee /etc/hostname > /dev/null
+
+sudo sed -i "s/^127\.0\.0\.1.*/127.0.0.1 localhost loghost $NEW_HOST/" /etc/hosts
+
+grep -q "c2s.cdacb.in" /etc/hosts
+if ( $status != 0 ) then
+    echo "14.139.1.126 c2s.cdacb.in" | sudo tee -a /etc/hosts > /dev/null
+endif
+
+grep -q "cadence_server" /etc/hosts
+if ( $status != 0 ) then
+    echo "14.139.1.126 cadence_server" | sudo tee -a /etc/hosts > /dev/null
+endif
+
+sudo hostnamectl set-hostname "$NEW_HOST"
+
+if ( $status != 0 ) then
+    echo "Failed to set hostname."
+    exit 1
+endif
+
+echo ""
+echo "========================================"
+echo " Setup Complete"
+echo "========================================"
+
+echo "Username     : $NEW_USER"
+echo "Display Name : $DISPLAY_NAME"
+echo "Hostname     : $NEW_HOST"
+
+echo ""
+echo "Please log out and log back in."
+echo ""
+
+# For Synopsys tools add to ~/.cshrc if required:
+#
+# setenv SNPSLMD_LICENSE_FILE 27020@14.139.1.126
+# setenv FLEXLM_DIAGNOSTICS 3
+\end{codeblock}
+
+Save this file as \inlinecode{c2ssetup.sh} and then run the following command to make it executable: 
+\begin{codeblock}{terminal}
+sudo chmod +x c2ssetup.sh
+\end{codeblock}
+
+Run the file:
+\begin{codeblock}{terminal}
+./c2ssetup.sh
+\end{codeblock}
+

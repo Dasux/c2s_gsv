@@ -8,4 +8,4 @@
 # Track only these document output/source formats.
 !*.html
 !*.tex
-!*.pdf
+!*manual.pdf

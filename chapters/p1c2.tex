@@ -128,15 +128,15 @@ installer image should be downloaded from the Red Hat Developer portal:
 	\url{https://developers.redhat.com/products/rhel/download}
 \end{center}
 
-\noindent For this workstation deployment, we are using \textbf{Red Hat Enterprise Linux 7.9.0}. This version is
+\noindent For this workstation deployment, we are using \textbf{Red Hat Enterprise Linux 8.7}. This version is
 selected because many EDA tools and supporting libraries are validated against older enterprise
-Linux releases, and RHEL 7.9.0 provides a mature, well-documented platform with broad community
+Linux releases, and RHEL 8.7 provides a mature, well-documented platform with broad community
 and vendor support. In an EDA environment, compatibility and predictable behavior are usually
 more important than using the newest available operating-system release.\\
 
 \begin{figure}[H]
 	\centering
-	\includegraphics[width=0.6\textwidth]{resources/rhel7.9.0.png}
+	\includegraphics[width=0.6\textwidth]{resources/rhel8.7.png}
 \end{figure}
 
 
@@ -254,7 +254,7 @@ After that close the window and click \textbf{Start} and then \textbf{Connect}. 
 	\includegraphics[width=0.5\textwidth]{resources/v7.jpg}
 \end{figure}
 
-Click \textbf{"Install Red Hat Enterprise Linux 7.9"}, and follow the setup prompts. For the "Installation Destination" on the Virtual Machine, it should automatically select the Virtual Disk Space (.vhdx) you set while setting up the Virtual Machine.
+Click \textbf{"Install Red Hat Enterprise Linux 8.7"}, and follow the setup prompts. For the "Installation Destination" on the Virtual Machine, it should automatically select the Virtual Disk Space (.vhdx) you set while setting up the Virtual Machine.
 
 \begin{figure}[H]
 	\centering 
@@ -287,7 +287,7 @@ The installation is ready to begin. After the final installation you will be pro
 	\includegraphics[width=0.5\textwidth]{resources/v11.jpg}
 \end{figure}
 
-\section{Native Dual Booting RHEL 7.9.0}
+\section{Native Dual Booting RHEL 8.7}
 
 Dual booting allows RHEL to run directly on the workstation while preserving an existing operating
 system on a separate partition. This is especially useful in academic laboratories where a machine may
@@ -377,7 +377,7 @@ For Windows, the most popular choice is Rufus; can be installed here: \url{https
 			\includegraphics[width=0.5\textwidth]{resources/rufus.png}
 			\caption{\small Example Screenshot of Rufus}
 		\end{figure}
-		This is a screenshot of the Rufus Tool. The \textit{Device} is usually automatically selected as your USB drive; if not, you can manually select it. Set the \textit{Boot selection} to the RHEL 7.9.0 ISO we just downloaded. For a modern workstation, use \textbf{GPT} as the partition scheme and \textbf{UEFI} as the target system. GPT is preferred because current Windows installations and enterprise workstations normally boot in UEFI mode, and using the same boot mode for both Windows and RHEL avoids mixed-mode bootloader issues. Use \textbf{MBR} only if the machine is confirmed to be using legacy BIOS boot. On Windows, this can be checked from \textbf{System Information} by looking at \textbf{BIOS Mode}: choose UEFI if it says \textit{UEFI}, and choose legacy/MBR only if it says \textit{Legacy}. \\
+		This is a screenshot of the Rufus Tool. The \textit{Device} is usually automatically selected as your USB drive; if not, you can manually select it. Set the \textit{Boot selection} to the RHEL 8.7 ISO we just downloaded. For a modern workstation, use \textbf{GPT} as the partition scheme and \textbf{UEFI} as the target system. GPT is preferred because current Windows installations and enterprise workstations normally boot in UEFI mode, and using the same boot mode for both Windows and RHEL avoids mixed-mode bootloader issues. Use \textbf{MBR} only if the machine is confirmed to be using legacy BIOS boot. On Windows, this can be checked from \textbf{System Information} by looking at \textbf{BIOS Mode}: choose UEFI if it says \textit{UEFI}, and choose legacy/MBR only if it says \textit{Legacy}. \\
 
 		For the file system, keep the Rufus default unless there is a specific reason to change it. \textbf{FAT32} is the safest choice for UEFI boot media because it is directly supported by UEFI firmware; \textbf{NTFS} may be used if Rufus requires it because of ISO file-size constraints. Do not choose \textbf{EXT4} for the installation USB, since it is not reliably readable by PC firmware during boot and is meant for Linux partitions after installation. Leave the cluster size at \textbf{Default}, typically \textbf{4096 bytes}, since changing it provides no practical benefit for this installer.\\
 
@@ -400,7 +400,7 @@ Once the base system installs, you should remove the installation media and wait
 \section{Chapter Summary}
 
 \begin{tcolorbox}
-\noindent This chapter established the preparation steps required to deploy RHEL 7.9.0 for Cadence and other EDA workflows. It compared virtualization and native dual booting, noting that virtualization is useful for testing and training, while native installation provides direct access to hardware resources and is therefore preferred for production EDA environments. The chapter also outlined the workstation hardware requirements, documented the target HP workstation, and explained the selection of the RHEL 7.9.0 DVD installation image for compatibility with enterprise toolchains. \\
+\noindent This chapter established the preparation steps required to deploy RHEL 8.7 for Cadence and other EDA workflows. It compared virtualization and native dual booting, noting that virtualization is useful for testing and training, while native installation provides direct access to hardware resources and is therefore preferred for production EDA environments. The chapter also outlined the workstation hardware requirements, documented the target HP workstation, and explained the selection of the RHEL 8.7 DVD installation image for compatibility with enterprise toolchains. \\
 
 \noindent The chapter then reviewed the firmware and boot environment, including the differences between BIOS, UEFI, and Secure Boot. Emphasis was placed on maintaining a consistent boot mode between Windows and RHEL to avoid bootloader and recovery issues. For virtualized deployments, a Hyper-V-based installation procedure was presented, including virtual machine creation, ISO attachment, firmware configuration, Secure Boot settings, and completion of the base operating system installation. \\
 

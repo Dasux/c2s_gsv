@@ -1,19 +1,754 @@
-\chapter{Introduction to Verilog}
+\chapter{Combinational Logic Design}
 
-\section{Why Hardware Description Languages Exist}
+\section{Continuous Assignments}
+Combinational circuits produce outputs that depend only on the present values of their inputs. In
+Verilog, the most direct way to describe this kind of hardware is by using a continuous assignment.
+A continuous assignment represents a permanent connection from an expression to a net, similar to a
+wire driven by a gate or a small network of gates in a schematic.\\
 
-\section{Verilog Program Structure}
+\noindent The keyword used for this purpose is \inlinecode{assign}. It is written inside a module,
+but outside procedural blocks such as \inlinecode{initial} and \inlinecode{always}. The left-hand
+side of a continuous assignment is normally a net such as \inlinecode{wire}, and the right-hand side
+is an expression constructed from input signals, constants, and Verilog operators. Whenever any
+signal on the right-hand side changes, the expression is re-evaluated and the driven output is
+updated by the simulator. This continuous evaluation behavior matches the physical behavior of
+combinational logic, where gate outputs respond to changes at their inputs after propagation delay.\\
 
-\section{Modules}
+\noindent The simplest example is a two-input AND gate:
 
-\section{Ports}
+\begin{codeblock}{verilog}
+module and_gate(A, B, Y);
+    input A, B;
+    output Y;
 
-\section{Nets and Registers}
+    assign Y = A & B;
+endmodule
+\end{codeblock}
 
-\section{Numbers and Constants}
+\noindent The output \inlinecode{Y} is driven by the bitwise AND of \inlinecode{A} and
+\inlinecode{B}. If either input changes during simulation, \inlinecode{Y} is automatically updated.
+No explicit event control or procedural statement is required because the assignment is concurrent
+with the rest of the module.\\
 
-\section{Operators}
+\noindent An OR gate follows the same pattern:
 
-\section{Laboratory Exercise}
+\begin{codeblock}{verilog}
+module or_gate(A, B, Y);
+    input A, B;
+    output Y;
 
-\subsection*{Half Adder}
+    assign Y = A | B;
+endmodule
+\end{codeblock}
+
+\noindent In this case, the operator \inlinecode{|} maps to a bitwise OR function. For one-bit
+signals it behaves as the OR gate used in a logic diagram. For vectors, the same operator applies
+bit by bit across corresponding positions of the operands.\\
+
+\noindent Continuous assignments may also contain compound expressions. The following module drives
+three outputs from the same set of inputs:
+
+\begin{codeblock}{verilog}
+module simple_logic(A, B, C, Y1, Y2, Y3);
+    input A, B, C;
+    output Y1, Y2, Y3;
+
+    assign Y1 = A & B;
+    assign Y2 = A | C;
+    assign Y3 = (A & B) | (~C);
+endmodule
+\end{codeblock}
+
+\noindent Each \inlinecode{assign} statement describes a separate concurrent hardware connection.
+The expression for \inlinecode{Y3} contains an AND operation, an inversion, and an OR operation; a
+synthesis tool interprets this as the corresponding combinational network. The order of the
+statements in the source does not imply execution order. All continuous assignments are active at
+the same time, which is why they are commonly used for RTL descriptions of combinational logic.
+
+\section{Dataflow Modeling}
+Dataflow modeling describes a circuit by specifying how data values are transformed as they move
+from inputs to outputs. Instead of instantiating individual gates, the designer writes Boolean or
+arithmetic expressions that define the required output behavior. The synthesis tool then constructs
+the equivalent logic hardware from those expressions.\\
+
+\noindent This is different from a structural description. In structural modeling, the source code
+explicitly connects gates or lower-level modules, much like a textual schematic. In dataflow
+modeling, the source code focuses on the relationship between signals. For example, a designer may
+write the expression for an output directly rather than listing every AND, OR, and NOT gate needed
+to realize it. This makes dataflow modeling concise and well suited to RTL design, especially for
+combinational blocks whose behavior is naturally expressed by equations.\\
+
+\noindent A simple dataflow example is the implementation of an inverter and a two-input gate:
+
+\begin{codeblock}{verilog}
+module basic_dataflow(A, B, Y_not, Y_and);
+    input A, B;
+    output Y_not, Y_and;
+
+    assign Y_not = ~A;
+    assign Y_and = A & B;
+endmodule
+\end{codeblock}
+
+\noindent The unary operator \inlinecode{~} describes bitwise inversion, while \inlinecode{&}
+describes bitwise AND. Since all signals are one bit wide in this example, each operator maps
+directly to the corresponding logic gate.\\
+
+\noindent More useful combinational functions are usually written as expressions that combine
+several operators:
+
+\begin{codeblock}{verilog}
+module combinational_network(A, B, C, D, F);
+    input A, B, C, D;
+    output F;
+
+    assign F = (A & B) | (C & ~D);
+endmodule
+\end{codeblock}
+
+\noindent The output \inlinecode{F} becomes high when \inlinecode{A} and \inlinecode{B} are both
+high, or when \inlinecode{C} is high while \inlinecode{D} is low. Parentheses are used to make the
+intended grouping clear. Although Verilog has defined operator precedence rules, explicit grouping
+is preferred in laboratory code because it reduces ambiguity during review.\\
+
+\noindent Dataflow descriptions also work naturally with buses. In the next example, the same
+operation is applied across four bits:
+
+\begin{codeblock}{verilog}
+module vector_logic(A, B, mask, Y);
+    input [3:0] A, B, mask;
+    output [3:0] Y;
+
+    assign Y = (A & mask) | (B & ~mask);
+endmodule
+\end{codeblock}
+
+\noindent Here, \inlinecode{A}, \inlinecode{B}, \inlinecode{mask}, and \inlinecode{Y} are four-bit
+vectors. The bitwise operators act independently on each bit position. This style is common in RTL
+because it describes a repeated logic pattern without writing a separate equation for every bit.\\
+
+\noindent The following table summarizes the operators most frequently used in dataflow models of
+combinational logic.
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{|c|c|p{7cm}|}
+\hline
+\textbf{Operator} & \textbf{Name} & \textbf{Typical Hardware Interpretation} \\
+\hline
+\inlinecode{~} & Bitwise NOT & Inverter on each bit of the operand \\
+\hline
+\inlinecode{&} & Bitwise AND & AND gate for each bit position \\
+\hline
+\inlinecode{|} & Bitwise OR & OR gate for each bit position \\
+\hline
+\inlinecode{^} & Bitwise XOR & XOR gate for each bit position \\
+\hline
+\inlinecode{+} & Addition & Combinational adder network \\
+\hline
+\inlinecode{?:} & Conditional & Multiplexer selection logic \\
+\hline
+\end{tabular}
+\caption{Common Verilog operators used in dataflow descriptions.}
+\label{tab:dataflow_operators}
+\end{table}
+
+\noindent Dataflow modeling is widely used because it is compact, synthesizable, and close to the
+Boolean equations used during circuit design. Its main limitation is that very complex expressions
+can become difficult to read and debug. For larger designs, dataflow statements are often combined
+with hierarchy: small combinational functions are written as equations, and larger systems are built
+by instantiating those verified modules.
+
+\section{Conditional Operators}
+The conditional operator provides a compact way to select one of two expressions based on a
+condition. It is also called the ternary operator because it uses three operands: the condition, the
+expression selected when the condition is true, and the expression selected when the condition is
+false. Its general form is:
+
+\begin{codeblock}{verilog}
+condition ? expression1 : expression2;
+\end{codeblock}
+
+\noindent If \inlinecode{condition} evaluates to true, the result of the whole expression is
+\inlinecode{expression1}. If the condition evaluates to false, the result is
+\inlinecode{expression2}. In synthesizable combinational RTL, this operator is normally interpreted
+as selection logic. For one-bit selection, that hardware is a multiplexer.\\
+
+\noindent A simple output selection example is shown below:
+
+\begin{codeblock}{verilog}
+module conditional_example(A, B, sel, Y);
+    input A, B, sel;
+    output Y;
+
+    assign Y = sel ? A : B;
+endmodule
+\end{codeblock}
+
+\noindent When \inlinecode{sel} is high, \inlinecode{Y} follows \inlinecode{A}. When
+\inlinecode{sel} is low, \inlinecode{Y} follows \inlinecode{B}. The statement is continuously
+evaluated, so any change on \inlinecode{sel}, \inlinecode{A}, or \inlinecode{B} is reflected at the
+output.\\
+
+\noindent The selected expressions may also be logic expressions rather than simple signals:
+
+\begin{codeblock}{verilog}
+module conditional_logic(A, B, C, mode, Y);
+    input A, B, C, mode;
+    output Y;
+
+    assign Y = mode ? (A & B) : (A | C);
+endmodule
+\end{codeblock}
+
+\noindent In this example, \inlinecode{mode} selects between two different logic functions. When
+\inlinecode{mode} is high, the output is the AND of \inlinecode{A} and \inlinecode{B}. When
+\inlinecode{mode} is low, the output is the OR of \inlinecode{A} and \inlinecode{C}. This is useful
+when a circuit must route one of several possible results to a common output.\\
+
+\noindent Conditional operators are also useful for signal routing on buses:
+
+\begin{codeblock}{verilog}
+module bus_select(data_a, data_b, sel, data_out);
+    input [3:0] data_a, data_b;
+    input sel;
+    output [3:0] data_out;
+
+    assign data_out = sel ? data_a : data_b;
+endmodule
+\end{codeblock}
+
+\noindent The selection is applied to the complete four-bit vector. Hardware synthesis produces four
+parallel one-bit selection circuits controlled by the same \inlinecode{sel} signal. This pattern is
+the natural Verilog form of a multiplexer, which is developed in detail in the next section.
+
+\section{Multiplexers}
+A multiplexer, commonly abbreviated as MUX, is a combinational circuit that selects one input from
+several available data inputs and forwards the selected value to a single output. The selection is
+controlled by one or more select lines. Multiplexers are fundamental building blocks in digital
+systems because they implement controlled routing: one data source is chosen while the others are
+ignored.\\
+
+\noindent A multiplexer has three main parts: data inputs, select inputs, and an output. The number
+of select lines determines how many data inputs can be addressed. With one select line, two inputs
+can be selected. With two select lines, four inputs can be selected. In general, \inlinecode{n}
+select lines can address \inlinecode{2^n} input choices. Since the output is determined only by the
+current values of the data and select inputs, a multiplexer is a combinational circuit and is well
+suited to continuous assignments and dataflow modeling.
+
+\subsection{2:1 Multiplexer}
+A 2:1 multiplexer has two data inputs, one select input, and one output. When the select input is
+low, the output follows \inlinecode{I0}. When the select input is high, the output follows
+\inlinecode{I1}. The complete truth table is shown in Table~\ref{tab:mux2_truth}. The selected
+input determines the output value, while the unselected input has no effect on the output.\\
+
+\noindent The Boolean expression for a 2:1 multiplexer is:
+\[
+Y = \overline{sel}\cdot I0 + sel\cdot I1
+\]
+
+\noindent The first product term enables \inlinecode{I0} when \inlinecode{sel = 0}, and the second
+product term enables \inlinecode{I1} when \inlinecode{sel = 1}.
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{|c|c|c|c|}
+\hline
+\textbf{sel} & \textbf{I0} & \textbf{I1} & \textbf{Y} \\
+\hline
+0 & 0 & 0 & 0 \\
+\hline
+0 & 0 & 1 & 0 \\
+\hline
+0 & 1 & 0 & 1 \\
+\hline
+0 & 1 & 1 & 1 \\
+\hline
+1 & 0 & 0 & 0 \\
+\hline
+1 & 0 & 1 & 1 \\
+\hline
+1 & 1 & 0 & 0 \\
+\hline
+1 & 1 & 1 & 1 \\
+\hline
+\end{tabular}
+\caption{Full truth table of a 2:1 multiplexer.}
+\label{tab:mux2_truth}
+\end{table}
+
+\noindent The conditional operator gives the clearest Verilog description of this selection:
+
+\begin{codeblock}{verilog}
+module mux2_conditional(I0, I1, sel, Y);
+    input I0, I1, sel;
+    output Y;
+
+    assign Y = sel ? I1 : I0;
+endmodule
+\end{codeblock}
+
+\noindent The expression reads directly from the truth table. If \inlinecode{sel} is high,
+\inlinecode{I1} is selected; otherwise \inlinecode{I0} is selected. This is a dataflow description
+because the output is defined by an expression rather than by explicit gate instances.\\
+
+\noindent The same 2:1 multiplexer can also be written using its Boolean equation:
+
+\begin{codeblock}{verilog}
+module mux2_dataflow(I0, I1, sel, Y);
+    input I0, I1, sel;
+    output Y;
+
+    assign Y = (~sel & I0) | (sel & I1);
+endmodule
+\end{codeblock}
+
+\noindent This version exposes the underlying AND-OR structure. The term \inlinecode{~sel & I0}
+enables \inlinecode{I0} when the select signal is low, and the term \inlinecode{sel & I1} enables
+\inlinecode{I1} when the select signal is high. The OR operation combines the enabled path into the
+output.
+
+\subsection{4:1 Multiplexer}
+A 4:1 multiplexer extends the same idea to four data inputs. It requires two select lines because
+four choices must be encoded. The select input is usually represented as a two-bit vector
+\inlinecode{sel[1:0]}, where \inlinecode{sel[1]} is the most significant select bit and
+\inlinecode{sel[0]} is the least significant select bit. The output follows exactly one of the four
+data inputs for each select combination.\\
+
+\noindent The Boolean expression for a 4:1 multiplexer is:
+\[
+Y = \overline{sel[1]}\cdot\overline{sel[0]}\cdot I0
+  + \overline{sel[1]}\cdot sel[0]\cdot I1
+  + sel[1]\cdot\overline{sel[0]}\cdot I2
+  + sel[1]\cdot sel[0]\cdot I3
+\]
+
+\noindent Each product term corresponds to one decoded select condition. Only the selected data
+input is allowed to contribute to \inlinecode{Y}; the other data inputs are masked by the select
+logic.
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{|c|c|c|c|c|c|c|}
+\hline
+\textbf{sel[1]} & \textbf{sel[0]} & \textbf{I0} & \textbf{I1} & \textbf{I2} & \textbf{I3} & \textbf{Y} \\
+\hline
+0 & 0 & 0 & X & X & X & 0 \\
+\hline
+0 & 0 & 1 & X & X & X & 1 \\
+\hline
+0 & 1 & X & 0 & X & X & 0 \\
+\hline
+0 & 1 & X & 1 & X & X & 1 \\
+\hline
+1 & 0 & X & X & 0 & X & 0 \\
+\hline
+1 & 0 & X & X & 1 & X & 1 \\
+\hline
+1 & 1 & X & X & X & 0 & 0 \\
+\hline
+1 & 1 & X & X & X & 1 & 1 \\
+\hline
+\end{tabular}
+\caption{Full truth table of a 4:1 multiplexer.}
+\label{tab:mux4_truth}
+\end{table}
+
+\noindent A compact dataflow implementation can be written by nesting conditional operators:
+
+\begin{codeblock}{verilog}
+module mux4_conditional(I0, I1, I2, I3, sel, Y);
+    input I0, I1, I2, I3;
+    input [1:0] sel;
+    output Y;
+
+    assign Y = sel[1] ? (sel[0] ? I3 : I2) : (sel[0] ? I1 : I0);
+endmodule
+\end{codeblock}
+
+\noindent The outer conditional checks \inlinecode{sel[1]}. If \inlinecode{sel[1]} is low, the
+selection is between \inlinecode{I0} and \inlinecode{I1}; if \inlinecode{sel[1]} is high, the
+selection is between \inlinecode{I2} and \inlinecode{I3}. The inner conditional in each branch then
+uses \inlinecode{sel[0]} to choose the final input. This corresponds to a tree of 2:1 multiplexers.\\
+
+\noindent The same function can be expressed using minterms:
+
+\begin{codeblock}{verilog}
+module mux4_dataflow(I0, I1, I2, I3, sel, Y);
+    input I0, I1, I2, I3;
+    input [1:0] sel;
+    output Y;
+
+    assign Y = (~sel[1] & ~sel[0] & I0) |
+               (~sel[1] &  sel[0] & I1) |
+               ( sel[1] & ~sel[0] & I2) |
+               ( sel[1] &  sel[0] & I3);
+endmodule
+\end{codeblock}
+
+\noindent This form is longer, but it makes the Boolean decoding of the select lines explicit. Each
+product term corresponds to one row of the truth table, and only one data input is enabled for each
+binary value of \inlinecode{sel}.\\
+
+\noindent Multiplexers are used extensively in digital systems. They select operands for arithmetic
+units, choose between register outputs, route data onto internal buses, select next-state values in
+control logic, and implement configurable datapaths. The conditional operator and dataflow
+assignments introduced earlier provide the most direct Verilog notation for these functions.
+
+\section{Full Adder Design}
+A Half Adder adds two one-bit inputs and produces a Sum and Carry output. It is useful for
+introducing combinational design, but it cannot accept a carry from a lower-order bit position.
+Multi-bit addition requires that each bit position include the carry generated by the previous
+position. This is the purpose of a Full Adder.\\
+
+\noindent A Full Adder has three one-bit inputs: \inlinecode{A}, \inlinecode{B}, and
+\inlinecode{Cin}. The input \inlinecode{Cin} represents the carry-in from a previous stage. It has
+two outputs: \inlinecode{Sum}, which is the one-bit addition result, and \inlinecode{Cout}, which is
+the carry-out passed to the next stage. The complete behavior is shown in
+Table~\ref{tab:full_adder_truth}.
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{|c|c|c|c|c|}
+\hline
+\textbf{A} & \textbf{B} & \textbf{Cin} & \textbf{Sum} & \textbf{Cout} \\
+\hline
+0 & 0 & 0 & 0 & 0 \\
+\hline
+0 & 0 & 1 & 1 & 0 \\
+\hline
+0 & 1 & 0 & 1 & 0 \\
+\hline
+0 & 1 & 1 & 0 & 1 \\
+\hline
+1 & 0 & 0 & 1 & 0 \\
+\hline
+1 & 0 & 1 & 0 & 1 \\
+\hline
+1 & 1 & 0 & 0 & 1 \\
+\hline
+1 & 1 & 1 & 1 & 1 \\
+\hline
+\end{tabular}
+\caption{Truth table of the Full Adder.}
+\label{tab:full_adder_truth}
+\end{table}
+
+\noindent From the truth table, the Sum output is high when an odd number of inputs are high. The
+Carry output is high when at least two of the three inputs are high. The Boolean equations are:
+\[
+\text{Sum} = A \oplus B \oplus Cin
+\]
+\[
+\text{Cout} = (A \cdot B) + (B \cdot Cin) + (A \cdot Cin)
+\]
+
+\noindent The carry equation shows why the Full Adder is suitable for multi-bit arithmetic. A carry
+is produced either because \inlinecode{A} and \inlinecode{B} are both high, or because one operand
+bit is high while the incoming carry is also high. In a ripple carry adder, this
+\inlinecode{Cout} becomes the \inlinecode{Cin} of the next more significant Full Adder stage. This
+stage-to-stage dependency is called carry propagation.\\
+
+
+\noindent A Full Adder can also be understood as two Half Adders and an OR gate. The first Half Adder
+adds \inlinecode{A} and \inlinecode{B}, producing an intermediate sum and carry. The second Half
+Adder adds the intermediate sum to \inlinecode{Cin}. The two carry outputs are then ORed to produce
+\inlinecode{Cout}. In RTL, the same behavior can be written more directly using continuous
+assignments:
+
+\begin{codeblock}{verilog}
+module full_adder(A, B, Cin, Sum, Cout);
+    input A, B, Cin;
+    output Sum, Cout;
+
+    assign Sum = A ^ B ^ Cin;
+    assign Cout = (A & B) | (B & Cin) | (A & Cin);
+endmodule
+\end{codeblock}
+
+\noindent The module declaration defines the Full Adder as a reusable design block. The input
+declaration lists the three one-bit operands, including the carry-in. The output declaration lists
+the two result signals. The first continuous assignment implements the three-input XOR function for
+\inlinecode{Sum}. The second continuous assignment implements the carry equation using AND terms
+for the possible carry-generating input pairs and an OR operation to combine them. Finally,
+\inlinecode{endmodule} closes the module so that it can be compiled independently or instantiated
+inside a larger design.\\
+
+\noindent An alternative compact implementation uses Verilog addition and concatenation:
+
+\begin{codeblock}{verilog}
+module full_adder_compact(A, B, Cin, Sum, Cout);
+    input A, B, Cin;
+    output Sum, Cout;
+
+    assign {Cout, Sum} = A + B + Cin;
+endmodule
+\end{codeblock}
+
+\noindent The concatenation \inlinecode{{Cout, Sum}} forms a two-bit result. Since the maximum value
+of \inlinecode{A + B + Cin} is three, two bits are sufficient to represent both the carry and the
+sum. This form is concise and synthesizable, but the explicit Boolean version is often preferred
+when first studying the circuit because it shows the logic structure directly.\\
+
+\noindent The Full Adder is the basic cell used to construct wider adders. In the following
+laboratory exercise, several Full Adder stages will be connected so that the carry-out of each stage
+feeds the carry-in of the next stage, forming a 4-bit ripple carry adder.
+
+\section{Laboratory Exercise -- 4-Bit Ripple Carry Adder}
+
+\subsection{Objective}
+The objective of this laboratory exercise is to design, simulate, and verify a 4-bit Ripple Carry
+Adder using Verilog HDL. The exercise combines the combinational design techniques introduced in
+this chapter and applies them to a practical arithmetic circuit.\\
+
+\noindent By completing this exercise, the reader will demonstrate hierarchical design, module
+instantiation, carry propagation between adder stages, and functional verification through
+simulation. The design will be written as reusable Verilog modules and verified in the Cadence
+simulation environment using a separate testbench.
+
+\subsection{Theory}
+Binary addition is performed bit by bit, beginning with the least significant bit and progressing
+toward the most significant bit. At each bit position, the circuit must add the corresponding bits
+of the two operands and also include any carry generated by the previous lower-order position. A
+Half Adder is insufficient for this task because it has no carry-in input.\\
+
+\noindent A Full Adder solves this limitation by accepting three inputs: \inlinecode{A},
+\inlinecode{B}, and \inlinecode{Cin}. It produces a \inlinecode{Sum} bit and a carry-out signal
+\inlinecode{Cout}. When several Full Adders are connected together, each stage handles one bit of a
+multi-bit addition. The carry-out of one stage becomes the carry-in of the next stage. This
+carry-chain structure is called a ripple carry adder because the carry information ripples from the
+least significant stage to the most significant stage.\\
+
+\noindent The ripple carry adder is simple and well suited for laboratory study. It clearly shows
+module reuse, signal interconnection, and the relationship between a one-bit arithmetic cell and a
+wider arithmetic circuit.
+
+\subsection{Ripple Carry Adder Architecture}
+A 4-bit Ripple Carry Adder is constructed from four one-bit Full Adder modules connected in series.
+The first Full Adder adds \inlinecode{A[0]}, \inlinecode{B[0]}, and the external
+\inlinecode{Cin}. Its carry-out is connected to the carry-in of the second Full Adder. This pattern
+continues until the fourth stage produces the final carry-out \inlinecode{Cout}.\\
+
+\noindent The input operands are \inlinecode{A[3:0]} and \inlinecode{B[3:0]}. The least significant
+bits are \inlinecode{A[0]} and \inlinecode{B[0]}, while the most significant bits are
+\inlinecode{A[3]} and \inlinecode{B[3]}. The output \inlinecode{Sum[3:0]} contains the four result
+bits, and \inlinecode{Cout} indicates whether the addition generated a carry beyond the most
+significant bit.
+
+% TODO: Insert Ripple Carry Adder block diagram
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.6\textwidth]{resources/ripple_carry.png}
+    \caption{Conceptual block diagram of a 4-bit Ripple Carry Adder constructed from four Full Adder stages.}
+    \label{fig:ripple_carry_adder_block}
+\end{figure}
+
+\noindent Data enters all four stages through the operand buses, but the carry path is sequential
+through the combinational chain. The first stage computes \inlinecode{Sum[0]} and an internal carry
+\inlinecode{c1}. The second stage uses \inlinecode{c1} to compute \inlinecode{Sum[1]} and
+\inlinecode{c2}. The third stage produces \inlinecode{Sum[2]} and \inlinecode{c3}. The fourth stage
+uses \inlinecode{c3} to compute \inlinecode{Sum[3]} and the final \inlinecode{Cout}. Although there
+is no clock in this circuit, the output cannot settle fully until the carry has propagated through
+the required stages.
+
+\subsection{Full Adder Module}
+The Full Adder module used in this exercise is the same one-bit combinational block discussed
+earlier in the chapter. It is written using continuous assignments so that the Boolean equations
+are represented directly in Verilog.
+
+\begin{codeblock}{verilog}
+module full_adder(A, B, Cin, Sum, Cout);
+    input A, B, Cin;
+    output Sum, Cout;
+
+    assign Sum = A ^ B ^ Cin;
+    assign Cout = (A & B) | (B & Cin) | (A & Cin);
+endmodule
+\end{codeblock}
+
+\noindent The inputs \inlinecode{A} and \inlinecode{B} are the operand bits for the current stage,
+and \inlinecode{Cin} is the carry entering that stage. The output \inlinecode{Sum} is generated by
+the XOR of the three inputs. The output \inlinecode{Cout} is generated when any two or more inputs
+are high, as expressed by the three AND terms combined by OR operations. This module is designed as
+a reusable cell and will be instantiated four times in the 4-bit adder.
+
+\subsection{4-Bit Ripple Carry Adder Implementation}
+The top-level Ripple Carry Adder module demonstrates hierarchical combinational design. Instead of
+rewriting the Full Adder equations four times, the design instantiates four copies of the
+\inlinecode{full_adder} module and connects them through intermediate carry wires.
+
+\begin{codeblock}{verilog}
+module ripple_carry_adder_4bit(A, B, Cin, Sum, Cout);
+    input [3:0] A, B;
+    input Cin;
+    output [3:0] Sum;
+    output Cout;
+
+    wire c1, c2, c3;
+
+    full_adder FA0 (
+        .A(A[0]),
+        .B(B[0]),
+        .Cin(Cin),
+        .Sum(Sum[0]),
+        .Cout(c1)
+    );
+
+    full_adder FA1 (
+        .A(A[1]),
+        .B(B[1]),
+        .Cin(c1),
+        .Sum(Sum[1]),
+        .Cout(c2)
+    );
+
+    full_adder FA2 (
+        .A(A[2]),
+        .B(B[2]),
+        .Cin(c2),
+        .Sum(Sum[2]),
+        .Cout(c3)
+    );
+
+    full_adder FA3 (
+        .A(A[3]),
+        .B(B[3]),
+        .Cin(c3),
+        .Sum(Sum[3]),
+        .Cout(Cout)
+    );
+endmodule
+\end{codeblock}
+
+\noindent The module interface declares two four-bit input operands, one external carry-in, a
+four-bit sum output, and one final carry-out. The internal wires \inlinecode{c1}, \inlinecode{c2},
+and \inlinecode{c3} carry information between adjacent Full Adder stages.\\
+
+\noindent Instance \inlinecode{FA0} is the least significant stage. It adds \inlinecode{A[0]},
+\inlinecode{B[0]}, and \inlinecode{Cin}, then produces \inlinecode{Sum[0]} and internal carry
+\inlinecode{c1}. Instance \inlinecode{FA1} uses \inlinecode{c1} as its carry-in and produces
+\inlinecode{c2}. Instance \inlinecode{FA2} uses \inlinecode{c2} and produces \inlinecode{c3}.
+Finally, instance \inlinecode{FA3} uses \inlinecode{c3} and produces the most significant sum bit
+and final \inlinecode{Cout}. This carry chaining is the defining feature of the ripple carry
+architecture.
+
+\subsection{Testbench Development}
+A testbench is required because the Ripple Carry Adder module does not generate its own input
+stimulus. The testbench instantiates the design under test, applies representative operand values,
+waits for the combinational outputs to settle, and records the results for inspection in the
+simulator and waveform viewer.\\
+
+\noindent The following testbench checks additions without carry generation, additions that produce
+internal carries, and additions that overflow beyond four bits.
+
+\begin{codeblock}{verilog}
+`timescale 1ns/1ps
+
+module ripple_carry_adder_4bit_tb;
+    reg [3:0] A, B;
+    reg Cin;
+    wire [3:0] Sum;
+    wire Cout;
+
+    ripple_carry_adder_4bit dut (
+        .A(A),
+        .B(B),
+        .Cin(Cin),
+        .Sum(Sum),
+        .Cout(Cout)
+    );
+
+    initial begin
+        $monitor($time, " A=%b B=%b Cin=%b Cout=%b Sum=%b",
+                 A, B, Cin, Cout, Sum);
+
+        A = 4'b0000; B = 4'b0000; Cin = 1'b0; #10;
+        A = 4'b0011; B = 4'b0100; Cin = 1'b0; #10;
+        A = 4'b0111; B = 4'b0001; Cin = 1'b0; #10;
+        A = 4'b0101; B = 4'b0011; Cin = 1'b1; #10;
+        A = 4'b1111; B = 4'b0001; Cin = 1'b0; #10;
+        A = 4'b1111; B = 4'b1111; Cin = 1'b1; #10;
+
+        $finish;
+    end
+endmodule
+\end{codeblock}
+
+\noindent The first test applies zero operands and verifies the reset-like baseline behavior of the
+combinational circuit. The second test performs addition without overflow. The third and fourth
+tests require carry propagation through one or more stages. The fifth test produces a carry beyond
+the four-bit sum field, and the final test verifies the maximum input condition with an asserted
+carry-in. The \inlinecode{#10} delays separate each stimulus vector in simulation time so that the
+waveform viewer clearly shows the response to each input combination. The \inlinecode{$finish}
+system task terminates the simulation after all vectors have been applied.
+
+\subsection{Simulation Procedure}
+The simulation should be performed as a controlled laboratory workflow. Keep the Full Adder source,
+Ripple Carry Adder source, and testbench source in the same project directory or add all three files
+explicitly to the Cadence simulation setup.
+
+\begin{enumerate}
+    \item Create a new Cadence project or working directory for the Ripple Carry Adder exercise.
+    \item Create the Verilog source file containing the \inlinecode{full_adder} module.
+    \item Create the Verilog source file containing the \inlinecode{ripple_carry_adder_4bit} module.
+    \item Create the testbench file containing \inlinecode{ripple_carry_adder_4bit_tb}.
+    \item Add all design and testbench files to the simulation environment.
+    \item Compile the source files and confirm that there are no syntax or elaboration errors.
+    \item Launch the simulation with \inlinecode{ripple_carry_adder_4bit_tb} as the top-level module.
+    \item Add \inlinecode{A}, \inlinecode{B}, \inlinecode{Cin}, \inlinecode{Sum}, and
+    \inlinecode{Cout} to the waveform viewer.
+    \item Run the simulation long enough for all test vectors to execute.
+    \item Compare the waveform and console output against the expected binary addition results.
+\end{enumerate}
+
+% TODO: Insert source compilation screenshot
+% TODO: Insert simulation launch screenshot
+% TODO: Insert waveform viewer screenshot
+
+\noindent During compilation, errors are most commonly caused by mismatched module names, missing
+source files, or incorrect port names during instantiation. During simulation, incorrect results are
+usually caused by a broken carry connection between stages or a mismatch between the expected and
+actual bit ordering of the buses.
+
+\subsection{Expected Results}
+The simulation should show that \inlinecode{Sum[3:0]} contains the lower four bits of the binary
+addition and that \inlinecode{Cout} contains the carry beyond the most significant bit. For example,
+\inlinecode{0011 + 0100} should produce \inlinecode{Sum = 0111} and \inlinecode{Cout = 0}. The
+case \inlinecode{1111 + 0001} should produce \inlinecode{Sum = 0000} and \inlinecode{Cout = 1},
+showing overflow beyond the four-bit output range.\\
+
+\noindent Carry propagation should be visible in the functional behavior of the result. When a
+lower-order stage generates a carry, the next stage must include that carry in its own sum
+calculation. Although the internal carry wires may not be top-level ports, they can be added to the
+waveform viewer from the design hierarchy if the simulator setup allows internal signal probing.
+
+% TODO: Insert Ripple Carry Adder waveform
+\begin{figure}[H]
+    \centering
+    \fbox{\parbox{0.86\linewidth}{\centering TODO: Insert Ripple Carry Adder waveform}}
+    \caption{Expected waveform for the 4-bit Ripple Carry Adder showing operand inputs, carry-in, sum output, and carry-out.}
+    \label{fig:ripple_carry_adder_waveform}
+\end{figure}
+
+\noindent The waveform verifies correct operation when each applied input vector produces the
+corresponding binary sum after the simulator advances past the stimulus delay. A mismatch in
+\inlinecode{Sum} indicates an error in the Full Adder equation or bit connection. A mismatch in
+\inlinecode{Cout} usually indicates an error in the final carry connection or in one of the
+intermediate carry wires.
+
+\subsection{Conclusion}
+This exercise demonstrated the design and verification of a 4-bit Ripple Carry Adder using Verilog
+HDL. The circuit was built hierarchically by defining a reusable Full Adder module and instantiating
+it four times inside a top-level combinational design. The intermediate carry wires illustrated how
+carry propagation links individual one-bit stages into a wider arithmetic circuit.\\
+
+\noindent The testbench verified the design by applying representative input combinations and
+checking the resulting sum and carry-out behavior through simulation. This workflow reinforces the
+standard RTL design method used throughout digital systems engineering: describe a reusable module,
+connect modules hierarchically, compile the design, simulate with controlled stimulus, and verify
+the waveform against expected behavior. The same discipline will be used in later chapters when the
+manual moves from combinational circuits to sequential logic and more complex digital systems.
