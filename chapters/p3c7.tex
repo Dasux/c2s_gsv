@@ -1,19 +1,570 @@
 \chapter{Verilog Testbenches}
 
 \section{What is Verification?}
+Every design discussed so far in this manual — the Half Adder, the Ripple Carry Adder, and the 4-bit Synchronous Counter — was written, compiled, and exercised through a testbench before its behavior was accepted as correct. This chapter formalizes that practice. Verification is the process of confirming that a design behaves according to its intended specification before it is committed to the next stage of the design flow. \\
+
+
+\noindent In the RTL-to-GDSII flow described throughout this manual, simulation is performed before synthesis for a deliberate reason. Once an RTL description has been synthesized, the design exists as a gate-level netlist tied to a specific standard cell library. Any functional error discovered at that stage requires the designer to return to the RTL, correct the logic, and repeat synthesis, timing closure, and any downstream physical design work that depended on the earlier netlist. The further a defect travels through the flow before it is caught, the more expensive it becomes to fix — not only in engineering time, but in the number of dependent steps that must be redone. Simulation at the RTL stage is the least expensive point at which a functional error can be identified, which is why a design is never considered complete simply because it compiles or synthesizes without errors. \\
+
+\begin{figure}[H]
+    \centering
+    \fbox{\parbox{0.84\linewidth}{\centering TODO: Insert verification workflow diagram showing RTL design, testbench application of stimulus, DUT response, and result checking, positioned before the synthesis stage of the RTL-to-GDSII flow.}}
+    \caption{Conceptual position of verification within the RTL-to-GDSII flow, showing the DUT receiving stimulus from a testbench and producing outputs that are checked before synthesis begins.}
+    \label{fig:verification}
+\end{figure}
+
+\noindent The design being verified is referred to as the Design Under Test, or DUT. The DUT is the module whose correctness is in question — it may be a single combinational block such as a multiplexer, or a hierarchical design such as the Ripple Carry Adder, where individual Full Adder instances are themselves part of a larger structure being verified as a whole. The DUT does not verify itself; it is a passive block of RTL that simply responds to whatever signals are applied to its inputs.\\
+
+
+\noindent Verification is carried out by applying a controlled sequence of input values to the DUT and observing the resulting outputs. This is the same principle used in the Half Adder exercise in Chapter 4 and the Ripple Carry Adder exercise in Chapter 5: known input combinations are applied, and the resulting Sum and Carry values are compared against the expected truth table. What differs in this chapter is not the principle, but the formality and structure with which stimulus is applied and results are checked.\\
+
+
+\noindent It is useful to think of verification as a process of building confidence rather than as a single pass/fail event. A single simulation run that produces the expected output for one input combination tells the designer very little on its own. Confidence increases as the design is exercised across a representative range of operating conditions — typical values, boundary values, reset conditions, and sequences that are likely to expose timing-related or state-dependent errors. A design that has been verified across such a range can be carried into synthesis and physical implementation with reasonable assurance that its logical behavior is correct, leaving the remaining stages of the flow to focus on timing, area, and physical constraints rather than functional correctness.\\
+
+
+
 
 \section{Testbench Architecture}
+A testbench is a Verilog module written specifically to exercise another module --  the DUT -- and to observe its behavior during simulation. Every testbench used in this manual so far has followed the same underlying structure, even though earlier chapters did not name the individual pieces explicitly. This section identifies those pieces so that they can be reused deliberately when writing new testbenches. \\
+
+A complete testbench is generally organized around the following elements:
+\begin{enumerate}
+	\item \textbf{Testbench Module} -- a top-level module with no ports. Unlike the DUT, a testbench does not need to expose an external interface, because it is never instantiated inside another design. It exists only for simulation.
+	\item \textbf{DUT Instantiation} -- an instance of the design being verified, connected to signals declared inside the testbench. This instance is often referred to by a short identifier such as \inlinecode{dut}, matching the convention used in earlier chapters.
+	\item \textbf{Input Stimulus} -- signals declared as \inlinecode{reg} inside the testbench and connected to the input ports of the DUT. These signals are driven by the testbench to apply test conditions.
+	\item \textbf{Output Monitoring} -- signals declared as \inlinecode{wire} inside the testbench and connected to the output ports of the DUT. These signals are observed, either visually in the waveform viewer or programmatically by the testbench itself.
+	\item \textbf{Clock Generation} -- for sequential designs, a periodic signal that drives the DUT's clock input. Combinational designs such as the Half Adder and Ripple Carry Adder do not require this element, but sequential designs such as the Synchronous Counter do.
+	\item \textbf{Result Checking} -- logic within the testbench that compares the observed outputs against expected values and reports whether the DUT behaved correctly.
+\end{enumerate}
+
+
+The general skeleton of a testbench module follows the same pattern used for ordinary RTL modules, with one important difference in how it is treated by the tools:
+
+\begin{codeblock}{verilog}
+`timescale 1ns/1ps
+
+module dut_tb;
+
+    // input stimulus signals (reg)
+    // output monitoring signals (wire)
+
+    dut_module dut (
+        // port connections
+    );
+
+    // clock generation, if required
+
+    initial begin
+        // stimulus sequence
+    end
+
+endmodule
+\end{codeblock}
+
+A testbench is a simulation construct only. It is never passed through synthesis, and it is never represented in the final hardware. Constructs that are perfectly normal in a testbench — unbounded delays, system tasks such as \inlinecode{$display} and \inlinecode{$finish}, and procedural blocks with no corresponding hardware structure — would either be rejected by a synthesis tool or would simply be ignored. For this reason, the separation between the DUT and the testbench is not just an organizational convenience; it reflects a real distinction in how the two pieces of code are processed by the Cadence toolchain. The DUT must remain synthesizable, while the testbench exists purely to drive and observe it during simulation. \\
+
+
+This separation also explains why the DUT is instantiated inside the testbench, and not the other way around. The testbench forms the outermost layer of the simulation hierarchy: it generates the clock, drives the inputs, and observes the outputs of the design beneath it, but it has no ports of its own and is never itself instantiated.
+
+
+\begin{figure}[H]
+    \centering
+    \fbox{\parbox{0.84\linewidth}{\centering TODO: Insert testbench architecture diagram showing the testbench module as an outer
+block containing the DUT instance, with stimulus signals flowing into the DUT, output
+signals flowing out to monitoring logic, and a clock generator feeding the DUT's clock
+input.}}
+    \caption{Structural view of a Verilog testbench, showing the DUT instance surrounded by stimulus generation, clock generation, and result-checking logic, all contained within the testbench module.}
+    \label{fig:verilog_testbench}
+\end{figure}
+
+
+With the overall structure established, the remaining sections of this chapter examine each of the procedural constructs used to build these elements -- \inlinecode{initial} blocks for one-time stimulus sequences, \inlinecode{always} blocks for repeating behavior such as clocks, and the system tasks used for monitoring and checking results.
 
 \section{Initial Blocks}
+An \inlinecode{initial} block describes a sequence of statements that begins executing at the start of simulation and runs exactly once. This makes it the natural construct for two purposes that appear in almost every testbench: establishing the initial state of signals before the DUT begins responding, and applying a sequence of stimulus values over the course of the simulation.\\
+
+The general form of an \inlinecode{initial} block is:
+\begin{codeblock}{verilog}
+initial begin
+    // statements executed once, in order
+end
+\end{codeblock}
+
+The statements inside an \inlinecode{initial} block execute in the order they are written, exactly like a sequential procedure. This is different from continuous assignments, where, as discussed in Chapter 5, the order of the statements in the source does not imply an execution order. Inside an \inlinecode{initial} block, order matters directly: each statement is completed before the next one begins, subject to any simulation delays that are written into the sequence. \\
+
+
+The simplest use of an \inlinecode{initial} block is to assign starting values to signals before the simulation proceeds further. This was used implicitly in the Synchronous Counter testbench in Chapter 6, where the clock signal was given a defined starting value:
+
+\begin{codeblock}{verilog}
+`timescale 1ns/1ps
+
+module init_example_tb;
+
+    reg clk;
+
+    initial begin
+        clk = 1'b0;
+    end
+
+endmodule
+end
+\end{codeblock}
+
+Without this assignment, \inlinecode{clk} would begin simulation in the unknown state \inlinecode{x}, and any logic depending on its value would also begin in an unknown state. Establishing a known starting condition for every signal driven by the testbench is good practice, since an unresolved \inlinecode{x} value can propagate through combinational logic and obscure the actual behavior under test. \\
+
+The second, and more common, use of an \inlinecode{initial} block is to apply a sequence of input values over simulation time. This is done using the \inlinecode{#} delay control, which pauses execution of the block for a specified number of simulation time units before the next statement runs. The unit of time is determined by the \inlinecode{`timescale} directive at the top of the file, which was introduced in Chapter 4. \\
+
+
+The following example applies four different input combinations to a pair of signals, separated by a fixed delay:
+
+\begin{codeblock}{verilog}
+`timescale 1ns/1ps
+
+module stimulus_example_tb;
+
+    reg A, B;
+
+    initial begin
+        A = 0; B = 0; #10;
+        A = 0; B = 1; #10;
+        A = 1; B = 0; #10;
+        A = 1; B = 1; #10;
+        $finish;
+    end
+
+endmodule
+\end{codeblock}
+
+This sequence is functionally identical to the stimulus used in the Half Adder testbench in Chapter 4. Execution begins with \inlinecode{A = 0; B = 0;}, both of which take effect immediately, at simulation time 0. The \inlinecode{#10} that follows then pauses the block for 10 time units before the next pair of assignments executes. This pattern — assign values, then delay — repeats for each row of the intended truth table, after which \inlinecode{$finish} ends the simulation.\\
+
+It is important to recognize that the delays inside an \inlinecode{initial} block apply to the testbench's own sequence of statements, not to the DUT. The DUT has no awareness of the testbench's timing structure; it simply responds to whatever values appear on its input ports at whatever simulation time they change. The delays exist so that the waveform viewer has a clear, evenly spaced record of each applied condition, and so that combinational logic has time to settle before the next input change is applied.\\
+
+
+A single testbench module may contain more than one \inlinecode{initial} block. When this is done, all \inlinecode{initial} blocks begin execution at simulation time 0 and proceed independently and concurrently. This is useful when one block is responsible for generating stimulus while another is responsible for reporting results, since the two concerns can be kept separate in the source code while still executing over the same simulation timeline. This pattern is used again later in this chapter when self-checking behavior is introduced.
 
 \section{Always Blocks}
+An \inlinecode{always} block describes behavior that repeats for the duration of the simulation, in response to events specified in its sensitivity list. Where an \inlinecode{initial} block executes its statements exactly once, an \inlinecode{always} block re-executes its statements every time the conditions in its sensitivity list are met. This makes \inlinecode{always} blocks suitable for two distinct purposes that appear throughout this manual: describing clocked sequential logic in RTL design, and generating repeating signals — most commonly a clock — inside a testbench. \\
+
+The general form of an \inlinecode{always} block is:
+
+\begin{codeblock}{verilog}
+always @(sensitivity_list)
+    // statement or block of statements
+\end{codeblock}
+
+The sensitivity list specifies the events that cause the block to execute. In RTL design, the sensitivity list is normally an edge of a clock signal, written using \inlinecode{posedge} or \inlinecode{negedge}, as introduced in Chapter 6. Each time the specified edge occurs, the statements inside the block execute once and then wait for the next occurrence of that edge. The D Flip-Flop and counter modules from Chapter 6 are built entirely on this principle:
+\begin{codeblock}{verilog}
+always @(posedge clk) begin
+    if (reset)
+        count <= 4'b0000;
+    else
+        count <= count + 1'b1;
+end
+\end{codeblock}
+
+\noindent This block does not run once and stop; it runs every time \inlinecode{clk} transitions from low to high, for as long as the simulation continues. Each execution either resets \inlinecode{count} or increments it, depending on the value of \inlinecode{reset} at that edge. This is the event-driven behavior that gives sequential circuits their defining property: the output changes only in response to a specific event, not continuously and not on a fixed schedule of its own choosing.\\
+
+\noindent Inside a testbench, \inlinecode{always} blocks are used differently. Rather than describing how a register should respond to a clock, the testbench uses an \inlinecode{always} block to generate the clock itself. A clock signal is, by definition, a value that toggles repeatedly for the entire simulation — which is exactly the kind of repeating behavior an \inlinecode{always} block is suited to describe. This usage was introduced briefly in Chapter 6 and is examined in full in the next section. \\
+
+\noindent  A second testbench use of \inlinecode{always} blocks is continuous monitoring of a signal as it changes, without waiting for a clock edge. An \inlinecode{always} block sensitive to a change in any signal — written using \inlinecode{always @(*)} or by listing the relevant signals explicitly — executes its body every time one of those signals changes value: 
+
+\begin{codeblock}{verilog}
+always @(A or B or Sum or Carry)
+    $display($time, " A=%b B=%b Sum=%b Carry=%b", A, B, Sum, Carry);
+\end{codeblock}
+
+This block produces a printed line every time any of \inlinecode{A, B, Sum,} or \inlinecode{Carry} changes, which can be useful for tracing the exact order in which signals settle during a single delay step. In practice, the \inlinecode{$monitor} system task used in earlier chapters provides a more convenient way to achieve a similar result, since it automatically reports whenever any of its arguments change without requiring an explicit sensitivity list. \inlinecode{$monitor} is used extensively later in this chapter and is revisited in the self-checking testbenches discussed in Section 7.7. \\
+
+\noindent The distinction to carry forward from this section is straightforward: an \inlinecode{initial} block describes something that happens once, at the start of simulation, while an \inlinecode{always} block describes something that happens repeatedly, in response to events that recur for as long as the simulation runs. Both constructs are procedural — both use the same \inlinecode{begin}/\inlinecode{end} block structure and the same assignment operators — but they serve fundamentally different roles in a testbench: \inlinecode{initial} blocks apply stimulus, while \inlinecode{always} blocks generate ongoing signals such as the clock, which is the subject of the next section. \\
+
 
 \section{Clock Generation}
+Every sequential design discussed so far — the D Flip-Flop, the registers, and the Synchronous Counter — depends on a clock signal to determine when its stored state is updated. In simulation, this clock does not come from an external oscillator or a physical clock distribution network; it must be generated by the testbench itself, using the \inlinecode{always} block construct introduced in the previous section. \\
+
+
+\noindent A clock signal in simulation is characterized by the same properties as a clock signal in hardware, introduced in Chapter 6: a clock period, a clock frequency, and a duty cycle. The clock period is the length of time required for one complete cycle — one rising edge to the next rising edge. The clock frequency is the reciprocal of the period. The duty cycle is the proportion of the period during which the signal is high, expressed as a percentage. A duty cycle of 50\% means the signal spends equal time high and low during each period, which is the most common configuration for digital testbenches and the one used throughout this manual.\\
+
+
+The standard method for generating a 50\% duty cycle clock in a testbench is a single \inlinecode{always} block that toggles the clock signal after a fixed delay:\\
+
+\begin{codeblock}{verilog}
+`timescale 1ns/1ps
+
+module clock_gen_tb;
+
+    reg clk;
+
+    initial begin
+        clk = 1'b0;
+    end
+
+    always #5 clk = ~clk;
+
+endmodule
+\end{codeblock}
+
+This is the same construct used in the Synchronous Counter testbench in Chapter 6. Its operation can be read in two parts. The \inlinecode{initial} block establishes a known starting value for \inlinecode{clk} at simulation time 0, as described in Section 7.3. The \inlinecode{always} block then takes over: every 5 time units, it inverts the current value of \inlinecode{clk}. Starting from \inlinecode{0}, the signal becomes \inlinecode{1} at time 5, returns to 0 at time 10, becomes \inlinecode{1} again at time 15, and so on for the remainder of the simulation. \\ 
+
+
+\noindent Because the signal toggles every 5 time units, one complete period — low, then high, then back to low — takes 10 time units. With the \inlinecode{`timescale 1ns/1ps} directive in effect, this corresponds to a clock period of 10 ns, or equivalently a clock frequency of 100 MHz. The duty cycle is 50\%, since the signal spends exactly 5 ns high and 5 ns low within each 10 ns period. Changing the delay value changes the period proportionally: \inlinecode{always #10 clk = ~clk;} would produce a 20 ns period, or 50 MHz, while still maintaining a 50\% duty cycle, since both the high and low phases are controlled by the same delay value. \\
+
+A duty cycle other than 50\% can be produced by using different delay values for the high and low phases, though this is rarely required for the digital designs covered in this manual:
+
+\begin{codeblock}{verilog}
+always begin
+    clk = 1'b1; #3;
+    clk = 1'b0; #7;
+end
+\end{codeblock}
+
+
+This produces a 10 ns period in which the clock is high for 3 ns and low for 7 ns — a 30\% duty cycle. Designs in this manual use the standard 50\% duty cycle clock generator shown earlier unless a specific exercise states otherwise.\\
+
+\noindent One detail is worth emphasizing for laboratory work: the \inlinecode{always #5 clk = ~clk;} statement, once started, never stops on its own. It continues toggling clk for as long as the simulation runs. Simulation ends only when a separate part of the testbench — typically the stimulus-generating \inlinecode{initial} block — calls \inlinecode{$finish}. If a testbench contains a clock generator but no statement that calls \inlinecode{$finish}, the simulation will continue indefinitely, or until it is stopped manually or by a tool-imposed time limit. For this reason, every testbench that includes a clock generator must also include a stimulus sequence that determines how long the simulation should run and brings it to an end.\\ 
+
+
+\begin{figure}[H]
+    \centering
+    \fbox{\parbox{0.84\linewidth}{\centering TODO: Insert clock waveform diagram showing the generated clk signal over several
+periods, with the period, the high and low phases, and the rising and falling edges
+labeled.}}
+    \caption{Waveform produced by the standard clock generator, showing a 10 ns period with a 50\% duty cycle.}
+    \label{fig:clock_waveform}
+\end{figure}
+
+With a clock available, the testbench can now drive sequential designs through a defined number of clock cycles. The next section addresses how stimulus — for both combinational and sequential designs — is organized into a coherent sequence of test conditions.
 
 \section{Stimulus Generation}
+The stimulus applied by a testbench is organized as a sequence of test vectors — specific combinations of input values applied at specific points in simulation time. The purpose of a test vector is to place the DUT into a known operating condition so that its response can be observed and compared against the expected behavior. A single test vector establishes one data point; a well-constructed sequence of test vectors establishes confidence across the range of conditions the design is expected to handle.\\
+
+
+\noindent For combinational designs, stimulus generation is comparatively simple, because the DUT's output depends only on the present inputs. Each test vector can be applied and allowed to settle independently of any other vector. The Ripple Carry Adder testbench from Chapter 5 illustrates this pattern:
+
+\begin{codeblock}{verilog}
+initial begin
+    $monitor($time, " A=%b B=%b Cin=%b Cout=%b Sum=%b",
+             A, B, Cin, Cout, Sum);
+
+    A = 4'b0000; B = 4'b0000; Cin = 1'b0; #10;
+    A = 4'b0011; B = 4'b0100; Cin = 1'b0; #10;
+    A = 4'b0111; B = 4'b0001; Cin = 1'b0; #10;
+    A = 4'b0101; B = 4'b0011; Cin = 1'b1; #10;
+    A = 4'b1111; B = 4'b0001; Cin = 1'b0; #10;
+    A = 4'b1111; B = 4'b1111; Cin = 1'b1; #10;
+    $finish;
+end
+\end{codeblock}
+
+Each line applies a complete set of operand and carry-in values and then waits 10 ns before moving to the next. The delay is not required by the combinational logic itself — the Ripple Carry Adder's outputs settle almost immediately after its inputs change — but it provides the waveform viewer with a clear, evenly spaced record of each applied condition, and it gives each test vector its own identifiable region of the simulation timeline. As discussed in Chapter 5, the chosen vectors deliberately cover several categories of behavior: an all-zero baseline, addition without carry propagation, addition with carry propagation through one or more stages, and addition that overflows the 4-bit result.\\
+
+
+\noindent For sequential designs, stimulus generation must additionally account for the clock. Because a sequential design only updates its state on a clock edge, a test vector applied to a sequential DUT is not fully "absorbed" until the next active edge occurs. Stimulus for sequential designs is therefore expressed not only in terms of what values are applied, but how many clock cycles those values are held for. The Synchronous Counter testbench from Chapter 6 demonstrates this:
+
+\begin{codeblock}{verilog}
+initial begin
+    $monitor($time, " reset=%b count=%b", reset, count);
+
+    reset = 1'b1;
+    #12;
+    reset = 1'b0;
+    #180;
+    reset = 1'b1;
+    #10;
+    reset = 1'b0;
+    #40;
+    $finish;
+end
+\end{codeblock}
+
+Here, the delays are chosen relative to the clock period rather than as arbitrary spacing. With a 10 ns clock period, holding \inlinecode{reset} high for 12 ns guarantees that at least one rising edge occurs while \inlinecode{reset} is asserted, so that the counter is observed entering its \inlinecode{reset} state. Releasing \inlinecode{reset} for 180 ns allows eighteen clock cycles to elapse — more than enough for a 4-bit counter to count from\inlinecode{ 0000} through \inlinecode{1111} and wrap around at least once, which is the overflow behavior described in Chapter 6. The second \inlinecode{reset} pulse and the final delay confirm that the counter can be returned to a known state after it has already been running, rather than only immediately after power-up.\\
+
+\noindent This illustrates the general principle behind stimulus generation: every test vector should be chosen for a reason connected to the behavior it is intended to exercise, and the duration for which it is held should be sufficient for that behavior to become observable — whether that means allowing combinational logic to settle, or allowing enough clock cycles for sequential state to evolve through the conditions of interest.\\
+
+
+A stimulus sequence that only exercises a small, convenient subset of conditions — for example, only ever testing a counter near \inlinecode{0000} and never near its maximum value — risks leaving design errors undetected simply because the conditions that would expose them were never applied. Comprehensive stimulus does not necessarily mean exhaustive stimulus; for a 4-bit counter, applying all sixteen possible states is practical, but for wider buses or more complex designs, exhaustive testing quickly becomes impractical. In those cases, stimulus is instead chosen to represent the categories of behavior the design must handle correctly — normal operation, boundary conditions, reset behavior, and overflow or wrap-around — which is the same approach already used in the Ripple Carry Adder and Synchronous Counter examples.
+
 
 \section{Self-Checking Testbenches}
+Every testbench presented so far in this manual relies on the \inlinecode{$monitor} system task to print signal values during simulation, leaving the task of judging correctness to the person running the simulation. The designer compares the printed values, or the waveform viewer's display, against the expected truth table or state sequence, and decides by inspection whether the DUT behaved correctly.\\
 
-\section{Laboratory Exercise}
 
-\subsection*{Counter Testbench}
+\noindent This approach is adequate for the small designs used in the laboratory exercises so far, where the expected outputs for each test vector can be checked by eye in a few seconds. It does not scale well. As designs grow larger, as stimulus sequences grow longer, and as the same testbench is reused repeatedly — after every RTL change, after every workstation clone, or as part of a larger regression — manually inspecting printed values for every run becomes slow, tedious, and error-prone. A self-checking testbench addresses this by having the testbench itself compare the DUT's actual output against the expected output, and report a pass or fail result without requiring the designer to inspect every line of output.\\
+
+\noindent The basic mechanism for a self-checking testbench is the \inlinecode{if} statement, used to compare an observed output against an expected value immediately after a test vector has had time to take effect. The following example extends the Half Adder testbench from Chapter 4 with a check after each applied input combination:
+
+\begin{codeblock}{verilog}
+`timescale 1ns/1ps
+
+module half_adder_selfcheck_tb;
+
+    reg A, B;
+    wire Sum, Carry;
+    reg exp_sum, exp_carry;
+
+    half_adder dut (
+        .A(A),
+        .B(B),
+        .Sum(Sum),
+        .Carry(Carry)
+    );
+
+    initial begin
+        A = 0; B = 0; exp_sum = 0; exp_carry = 0; #10;
+        A = 0; B = 1; exp_sum = 1; exp_carry = 0; #10;
+        A = 1; B = 0; exp_sum = 1; exp_carry = 0; #10;
+        A = 1; B = 1; exp_sum = 0; exp_carry = 1; #10;
+        $finish;
+    end
+
+    always @(A or B) begin
+        #1;
+        if (Sum !== exp_sum || Carry !== exp_carry)
+            $error("Mismatch: A=%b B=%b Sum=%b (exp %b) Carry=%b (exp %b)",
+                   A, B, Sum, exp_sum, Carry, exp_carry);
+        else
+            $display($time, " PASS: A=%b B=%b Sum=%b Carry=%b", A, B, Sum, Carry);
+    end
+
+endmodule
+\end{codeblock}
+
+The structure of this testbench follows directly from the constructs introduced earlier in this chapter. The \inlinecode{initial} block applies the same four input combinations used in Chapter 4, but each assignment is now accompanied by the corresponding expected values, \inlinecode{exp_sum} and \inlinecode{exp_carry}, taken directly from the Half Adder truth table. A second block, sensitive to changes in \inlinecode{A} or \inlinecode{B}, waits 1 ns for the combinational outputs to settle and then compares \inlinecode{Sum} and \inlinecode{Carry} against the expected values using \inlinecode{if}. If the comparison fails, \inlinecode{$error} reports a mismatch, including the actual and expected values for both outputs. If the comparison succeeds, \inlinecode{$display} reports a pass for that input combination.\\
+
+
+\noindent The comparison uses the \inlinecode{!==} operator rather than \inlinecode{!=}. As discussed in Chapter 4, Verilog signals can take the values \inlinecode{0, 1, x,} and \inlinecode{z}. The \inlinecode{!==} operator performs an exact four-state comparison, treating \inlinecode{x} and \inlinecode{z} as distinct values rather than attempting to resolve them. This is important in a checking context: if a design defect causes an output to remain at \inlinecode{x} when it should be a defined \inlinecode{0} or \inlinecode{1}, a four-state comparison will correctly flag this as a mismatch, whereas a two-state comparison might not. \\
+
+
+\noindent The same principle applies to sequential designs, with the check performed relative to the clock rather than relative to a change in the inputs. For the Synchronous Counter, the expected count value can be tracked by the testbench itself and compared against the DUT's output on each clock edge:
+
+\begin{codeblock}{verilog}
+reg [3:0] expected_count;
+
+always @(posedge clk) begin
+    if (reset)
+        expected_count <= 4'b0000;
+    else
+        expected_count <= expected_count + 1'b1;
+end
+
+always @(posedge clk) begin
+    #1;
+    if (count !== expected_count)
+        $error("Mismatch at time %0t: count=%b expected=%b",
+               $time, count, expected_count);
+end
+\end{codeblock}
+
+\noindent Here, the testbench maintains its own copy of the expected count using exactly the same reset and increment logic as the DUT, described in Chapter 6. A second \inlinecode{always} block, also triggered on \inlinecode{posedge clk}, waits briefly for the DUT's output to update and then compares it against the testbench's own expected value. Because the expected-value logic is written independently of the DUT, this check is meaningful: it is not simply comparing the DUT against itself, but against a separately written model of the correct behavior.\\
+
+\noindent The distinction between this approach and the \inlinecode{$monitor}-based testbenches used earlier in this manual is one of effort and scalability rather than of fundamental technique. A self-checking testbench requires more work to write, because the expected behavior of the design must be expressed explicitly in the testbench rather than left for the designer to judge by eye. In exchange, the testbench becomes repeatable: it can be run after every change to the RTL, every workstation clone, or every tool update, and it will report \inlinecode{PASS} or \inlinecode{$error} without requiring anyone to re-examine a waveform. As designs grow beyond the small combinational and sequential blocks used in this manual, this repeatability becomes the primary reason self-checking testbenches are used in preference to manual inspection — the verification effort invested once in writing the checking logic is reused automatically on every subsequent simulation run.\\
+
+\noindent The laboratory exercise that follows applies these constructs together — clock generation, sequential stimulus, and self-checking comparison — to the 4-bit Synchronous Counter introduced in Chapter 6, producing a complete and automatically verified testbench for that design.
+
+\section{Laboratory Exercise -- Counter Testbench}
+
+\subsection{Objective}
+The objective of this laboratory exercise is to develop, execute, and verify a complete Verilog testbench for the 4-bit Synchronous Counter designed in Chapter 6. The exercise builds directly on the constructs introduced earlier in this chapter — initial blocks, always blocks, clock generation, and self-checking comparison — and applies them in a single, integrated verification environment.\\
+
+
+\noindent By completing this exercise, the reader will demonstrate DUT instantiation, clock generation, reset sequencing, stimulus generation, functional verification, waveform observation, and simulation-based debugging. The resulting testbench will confirm that the counter initializes correctly, responds to reset, increments through its full range of states, and exhibits the wrap-around behavior described in Chapter 6, all observed through the Cadence simulation environment.
+
+\subsection{Theory}
+A testbench is a Verilog module written to exercise another module — the Design Under Test, or DUT — and to observe its response during simulation. As discussed earlier in this chapter, the testbench applies a sequence of input stimulus to the DUT, allows the design to respond according to its RTL description, and either presents the resulting output for inspection or compares it directly against an expected value.\\
+
+\noindent For a sequential design such as the Synchronous Counter, verification requires three coordinated elements: a clock signal that drives the counter's internal state updates, a reset signal that establishes a known starting condition, and a stimulus sequence long enough to observe the counter progressing through its complete state space. The counter is verified by holding reset asserted for at least one clock edge, releasing it, and then allowing the clock to run for enough cycles that the count value can be seen advancing from \inlinecode{0000} through \inlinecode{1111} and wrapping back to \inlinecode{0000}.\\
+
+
+\noindent This exercise is performed in simulation, before any synthesis activity, for the reason established in Section 7.1: a functional error in the counter's reset or increment logic is far less costly to identify and correct at the RTL stage than after the design has been synthesized into a gate-level netlist.
+
+\subsection{Design Under Test}
+
+The Design Under Test for this exercise is the \inlinecode{synchronous_counter_4bit} module developed in Chapter 6. Its interface consists of three ports: a clock input \inlinecode{clk}, a reset input \inlinecode{reset}, and a 4-bit registered output \inlinecode{count}.\\
+
+
+\noindent The expected operational behavior of the counter is as follows. On each rising edge of \inlinecode{clk}, the counter checks the value of \inlinecode{reset}. If \inlinecode{reset} is asserted, \inlinecode{count} is cleared to \inlinecode{4'b0000} on that edge. If \inlinecode{reset} is not asserted, \inlinecode{count} is incremented by one. Because \inlinecode{count} is four bits wide, an increment applied to \inlinecode{1111} wraps around to \inlinecode{0000}, which is the overflow behavior described in Chapter 6.
+
+\begin{figure}[H]
+    \centering
+    \fbox{\parbox{0.84\linewidth}{\centering TODO: Insert DUT block diagram}}
+	\caption{Block diagram of the 4-bit Synchronous Counter, showing the \inlinecode{clk} and \inlinecode{reset} inputs and the \inlinecode{count} output.}
+    \label{fig:dut}
+\end{figure}
+
+\noindent The RTL for this module is unchanged from Chapter 6 and is reproduced here for reference:
+\begin{codeblock}{verilog}
+module synchronous_counter_4bit(clk, reset, count);
+    input clk, reset;
+    output reg [3:0] count;
+
+    always @(posedge clk) begin
+        if (reset)
+            count <= 4'b0000;
+        else
+            count <= count + 1'b1;
+    end
+endmodule
+\end{codeblock}
+
+\subsection{Testbench Architecture}
+
+The verification environment for this exercise follows the architecture introduced in Section 7.2. A top-level testbench module, \inlinecode{synchronous_counter_4bit_tb}, contains no ports of its own and is responsible for instantiating the DUT, generating the clock, generating the reset sequence, applying stimulus, and monitoring the output.
+
+The DUT is instantiated as \inlinecode{dut}, with its \inlinecode{clk}, \inlinecode{reset}, and \inlinecode{count} ports connected to corresponding signals declared inside the testbench. A clock generator, built using the \inlinecode{always} block construct from Section 7.5, produces a continuous 10~ns-period clock for the duration of the simulation. A separate initial block generates the reset sequence and the overall timing of the test, asserting \inlinecode{reset} at the start of simulation, releasing it to allow the counter to run freely, and asserting it again partway through the simulation to confirm that the counter can be returned to a known state after it has already been counting. Output monitoring is performed using \inlinecode{$monitor}, which prints the value of \inlinecode{reset} and \inlinecode{count} whenever either signal changes.
+
+% TODO: Insert testbench architecture diagram
+
+\begin{figure}[h]
+\centering
+\caption{Verification environment for the 4-bit Synchronous Counter, showing the testbench module containing the DUT instance, clock generator, reset and stimulus generation, and output monitoring.}
+\label{fig:counter_tb_arch}
+\end{figure}
+
+Each of these components plays a distinct role. The clock generator establishes the timing reference against which all state updates occur. The reset sequence establishes and re-establishes a known starting condition. The stimulus duration determines how many clock cycles the counter is allowed to run, which must be sufficient to observe the full count sequence and at least one wrap-around. The monitoring statement provides a textual, time-stamped record of the counter's behavior that can be compared directly against the expected state sequence from Table 6.3 and Table 6.4.
+
+\subsection{Testbench Implementation}
+
+The complete testbench is constructed in stages, beginning with the module declaration, signal definitions, and DUT instantiation.
+
+\begin{codeblock}{verilog}
+`timescale 1ns/1ps
+
+module synchronous_counter_4bit_tb;
+
+    reg clk, reset;
+    wire [3:0] count;
+
+    synchronous_counter_4bit dut (
+        .clk(clk),
+        .reset(reset),
+        .count(count)
+    );
+
+endmodule
+\end{codeblock}
+
+The \inlinecode{`timescale} directive establishes the simulation time unit and precision, consistent with the testbenches used in earlier chapters. The signals \inlinecode{clk} and \inlinecode{reset} are declared as \inlinecode{reg}, since they are driven by the testbench, while \inlinecode{count} is declared as \inlinecode{wire}, since it is driven by the DUT. The DUT is instantiated as \inlinecode{dut}, with each of its ports connected by name to the corresponding testbench signal --- the same connection style used for the Full Adder instances in the Ripple Carry Adder testbench in Chapter 5.
+
+The next addition is the clock generator, using the standard construct introduced in Section 7.5:
+
+\begin{codeblock}{verilog}
+    initial begin
+        clk = 1'b0;
+    end
+
+    always #5 clk = ~clk;
+\end{codeblock}
+
+The \inlinecode{initial} block establishes a known starting value of \inlinecode{0} for \inlinecode{clk} at simulation time 0. The \inlinecode{always} block then toggles \inlinecode{clk} every 5~ns, producing a clock signal with a 10~ns period and a 50\% duty cycle. As discussed in Section 7.5, this block runs continuously for the remainder of the simulation and does not, by itself, determine when the simulation ends.
+
+The reset sequence and overall stimulus timing are provided by a second \inlinecode{initial} block:
+
+\begin{codeblock}{verilog}
+    initial begin
+        $monitor($time, " reset=%b count=%b", reset, count);
+
+        reset = 1'b1;
+        #12;
+        reset = 1'b0;
+        #180;
+        reset = 1'b1;
+        #10;
+        reset = 1'b0;
+        #40;
+        $finish;
+    end
+\end{codeblock}
+
+This sequence proceeds as follows. The \inlinecode{$monitor} statement is registered first, so that every subsequent change to \inlinecode{reset} or \inlinecode{count} is printed with its associated simulation time. \inlinecode{reset} is then asserted at time 0 and held for 12~ns. Because the clock period is 10~ns, this guarantees that at least one rising edge of \inlinecode{clk} occurs while \inlinecode{reset} is asserted, forcing \inlinecode{count} to \inlinecode{4'b0000} on that edge. \inlinecode{reset} is then released and held low for 180~ns --- eighteen clock cycles --- which is more than enough for the counter to advance from \inlinecode{0000} through \inlinecode{1111} and wrap around to \inlinecode{0000} at least once. \inlinecode{reset} is asserted a second time for 10~ns, confirming that the counter can be returned to \inlinecode{0000} after it has already been running, and is then released for a final 40~ns before \inlinecode{$finish} ends the simulation.
+
+The complete testbench, combining all of the segments above, is as follows:
+
+\begin{codeblock}{verilog}
+`timescale 1ns/1ps
+
+module synchronous_counter_4bit_tb;
+
+    reg clk, reset;
+    wire [3:0] count;
+
+    synchronous_counter_4bit dut (
+        .clk(clk),
+        .reset(reset),
+        .count(count)
+    );
+
+    initial begin
+        clk = 1'b0;
+    end
+
+    always #5 clk = ~clk;
+
+    initial begin
+        $monitor($time, " reset=%b count=%b", reset, count);
+
+        reset = 1'b1;
+        #12;
+        reset = 1'b0;
+        #180;
+        reset = 1'b1;
+        #10;
+        reset = 1'b0;
+        #40;
+        $finish;
+    end
+
+endmodule
+\end{codeblock}
+
+This testbench satisfies each of the requirements for the exercise. The DUT is instantiated and connected to a generated clock and a controlled reset sequence. The counter is initialized through the first reset pulse, allowed to increment freely through enough cycles to wrap around at least once, and then returned to a known state through the second reset pulse. The \inlinecode{$monitor} statement provides a continuous textual record of \inlinecode{reset} and \inlinecode{count}, while the waveform viewer, opened during the simulation procedure that follows, provides a graphical record of the same behavior.
+
+\subsection{Simulation Procedure}
+
+The simulation should be carried out using the same workflow established in Chapters 4 through 6.
+
+\begin{enumerate}
+    \item Create a new working directory or Cadence project for the Synchronous Counter testbench exercise.
+    \item Create the Verilog source file containing the \inlinecode{synchronous_counter_4bit} module, using the implementation from Chapter 6.
+    \item Create the testbench file containing \inlinecode{synchronous_counter_4bit_tb}, using the implementation from Section 7.8.5.
+    \item Add both Verilog files to the simulation environment.
+    \item Compile the design and confirm that no syntax or elaboration errors are reported.
+
+% TODO: Insert compilation screenshot
+
+    \item Launch the simulation with \inlinecode{synchronous_counter_4bit_tb} as the top-level module.
+
+% TODO: Insert simulation launch screenshot
+
+    \item Open the waveform viewer and add \inlinecode{clk}, \inlinecode{reset}, and \inlinecode{count} to the display.
+
+% TODO: Insert waveform viewer screenshot
+
+    \item Run the simulation to completion and verify the counter's behavior against the expected sequence described in the following section.
+\end{enumerate}
+
+During compilation, errors are most commonly caused by mismatched module or port names between the DUT and the testbench, or by a missing source file in the simulation setup. During simulation, incorrect behavior in the printed \inlinecode{$monitor} output or in the waveform usually indicates either an incorrect reset polarity or an error in the increment logic of the DUT, and the relevant RTL should be reviewed against the implementation in Chapter 6.
+
+\subsection{Expected Results}
+
+During simulation, \inlinecode{clk} should be observed toggling continuously with a 10~ns period for the entire duration of the run, beginning from its initialized value of \inlinecode{0}. At simulation time 0, \inlinecode{reset} should be high, and by the first rising edge of \inlinecode{clk}, \inlinecode{count} should become \inlinecode{4'b0000}.
+
+After \inlinecode{reset} is released, \inlinecode{count} should increment by one on each subsequent rising edge of \inlinecode{clk}, progressing through the binary sequence \inlinecode{0001}, \inlinecode{0010}, \inlinecode{0011}, and so on. The transitions in \inlinecode{count} should occur only at rising clock edges and should remain stable between edges, confirming the synchronous, clock-controlled behavior described in Chapter 6. As the simulation continues, \inlinecode{count} should reach \inlinecode{1111} and, on the next rising edge, wrap around to \inlinecode{0000}, demonstrating the overflow behavior of the 4-bit register.
+
+When \inlinecode{reset} is asserted a second time, \inlinecode{count} should return to \inlinecode{0000} on the next rising edge, regardless of its value at that point in the sequence, confirming that reset behaves correctly even after the counter has been running for an extended period.
+
+% TODO: Insert counter verification waveform
+
+\begin{figure}[h]
+\centering
+\caption{Verification waveform for the 4-bit Synchronous Counter, showing \texttt{clk}, \texttt{reset}, and \texttt{count}, with the initial reset, binary count progression, wrap-around from \texttt{1111} to \texttt{0000}, and the second reset pulse all visible.}
+\label{fig:counter_tb_waveform}
+\end{figure}
+
+The waveform confirms correct functionality when each of these behaviors is visible in the order described: initialization to \inlinecode{0000} under the first reset, uninterrupted binary counting at each rising clock edge, a single wrap-around from \inlinecode{1111} back to \inlinecode{0000}, and a return to \inlinecode{0000} under the second reset. Any deviation from this sequence --- such as \inlinecode{count} changing between clock edges, failing to reset, or failing to wrap around --- indicates an error in either the DUT or the testbench and should be investigated using the \inlinecode{$monitor} output as a time-stamped reference before the waveform is examined in detail.
+
+\subsection{Conclusion}
+
+This exercise demonstrated the development of a complete verification environment for the 4-bit Synchronous Counter introduced in Chapter 6. A dedicated testbench module was constructed that instantiated the DUT, generated a continuous clock signal, applied a reset sequence sufficient to establish and re-establish a known starting state, and allowed the counter to run through enough clock cycles to exhibit its full count sequence and wrap-around behavior.
+
+The exercise applied, in combination, each of the constructs introduced earlier in this chapter: \inlinecode{initial} blocks for one-time initialization and stimulus sequencing, \inlinecode{always} blocks for continuous clock generation, simulation delays for controlling the timing of the test, and \inlinecode{$monitor} for textual observation of the design's response. The simulation confirmed, through both the printed output and the waveform viewer, that the counter initializes correctly, increments on each rising clock edge, wraps around from \inlinecode{1111} to \inlinecode{0000}, and responds correctly to reset at any point during operation.
+
+The verification methodology demonstrated in this exercise --- instantiating a DUT, generating clock and reset signals, applying stimulus over a defined simulation period, and observing the result --- forms the foundation for the more advanced verification activities discussed in the chapters that follow, including detailed waveform-based debugging, simulation-driven analysis of RTL bugs, and coverage measurement using IMC.
