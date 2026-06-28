@@ -2,16 +2,852 @@
 
 \section{Compilation}
 
+The testbenches developed in Chapter 7 cannot be simulated directly. Before the Cadence Xcelium simulator can execute a single line of stimulus, the Verilog source files describing both the DUT and the testbench must first pass through compilation. Compilation is the stage at which the simulator reads each source file, parses its contents according to the rules of the Verilog language, and checks that the code is syntactically well formed. It is, in effect, the same role played by a compiler in conventional software development, except that the unit of compilation here is a hardware description rather than an executable program.\\
+
+During compilation, the simulator does not yet build a connected model of the design. It works through each file independently, identifying module declarations, port lists, signal declarations, and procedural blocks, and confirming that every statement obeys Verilog's grammar. This is also the stage at which module discovery takes place: the simulator records every module definition it encounters across the supplied source files, so that later stages can locate and connect them by name. A design that compiles successfully is therefore not yet known to be functionally correct, or even fully connected --- it is only known to be syntactically valid and to consist of recognizable module definitions.\\
+
+Compilation is deliberately the first stage of the flow because it is the least expensive point at which a coding mistake can be caught. A typographical error, a missing keyword, or an incorrectly formed declaration produces an immediate, specific compiler message rather than a confusing or silent failure later during simulation. For this reason, compilation errors should always be resolved completely, and in the order reported, before moving on to elaboration.\\
+
+Several categories of error are routinely detected at this stage. A missing semicolon at the end of a statement is among the most common, since Verilog uses the semicolon to delimit individual statements within a procedural block:\\
+
+\begin{codeblock}{verilog}
+module bad_example(A, B, Y);
+    input A, B;
+    output Y;
+
+    assign Y = A & B
+endmodule
+\end{codeblock}
+
+The missing semicolon after \inlinecode{assign Y = A \& B} causes the compiler to report a syntax error, frequently pointing not at the line containing the actual mistake but at the line immediately following it, since the parser does not recognize the end of the statement until it encounters the next token. This is a useful detail to remember when interpreting compiler output: if a reported line appears syntactically correct on its own, the actual fault is often on the line immediately above it.\\
+
+A second common category is the use of an undeclared signal. Every net or variable referenced inside a module must be declared, either in the port list or in an internal declaration, before it is used:\\
+
+\begin{codeblock}{verilog}
+module bad_mux(I0, I1, sel, Y);
+    input I0, I1, sel;
+    output Y;
+
+    assign Y = sel ? I1 : I2;
+endmodule
+\end{codeblock}
+
+Here, the signal \inlinecode{I2} is referenced in the conditional expression but was never declared as a port or as an internal signal --- the intended signal was \inlinecode{I0}. Depending on the simulator's configuration, this may be reported as an undeclared identifier error during compilation, or, in tools that implicitly declare undeclared one-bit nets, it may compile without error and instead produce an incorrect result during simulation, since \inlinecode{I2} would silently default to a net carrying no meaningful value. For this reason, laboratory work in this manual treats any implicitly declared signal as a defect to be corrected, regardless of whether the compiler flags it directly.\\
+
+A third category involves the module declaration itself, including a mismatch between the ports listed in the module header and the ports referenced inside the body, or a missing \inlinecode{endmodule} keyword at the close of a module. Since Verilog modules do not use indentation to define scope, a missing \inlinecode{endmodule} can cause the compiler to interpret an entire subsequent module as if it were nested inside the previous one, producing a cascade of unrelated-looking errors from a single missing keyword.\\
+
+Finally, compilation can fail simply because a required source file was never supplied to the simulator. If the testbench instantiates a DUT module that has not been compiled --- because its file was omitted from the project, misnamed, or stored in the wrong directory --- the simulator will report that the module cannot be found. This category of error is procedural rather than syntactic, and is corrected by reviewing the project's file list rather than the Verilog source itself.\\
+
+% TODO: Insert compilation workflow diagram
+
+\begin{figure}[h]
+\centering
+\caption{Position of compilation within the Cadence simulation flow, showing source files being parsed and checked before elaboration begins.}
+\label{fig:compilation_workflow}
+\end{figure}
+
+Compilation, therefore, occupies the first position in the simulation flow: source files in, syntactic confirmation out. It establishes that the supplied Verilog text is well formed and that every module referenced elsewhere in the project has been recognized. It does not yet confirm that those modules are correctly connected to one another, which is the task of the next stage, elaboration.\\
+
 \section{Elaboration}
+
+Once every source file has compiled successfully, the simulator proceeds to elaboration. Where compilation processes each file independently, elaboration is the stage at which the simulator constructs the actual design hierarchy implied by those files: it resolves which module instantiates which, expands every instance into its place in that hierarchy, connects ports between modules according to the instantiation statements, and resolves any parameters that affect signal widths or behavior.\\
+
+It is useful to think of elaboration as the point at which the simulator builds a concrete model of the circuit described by the source code. Compilation confirms that the \inlinecode{ripple\_carry\_adder\_4bit} module and the \inlinecode{full\_adder} module are each individually well formed; elaboration is what actually creates four instances of \inlinecode{full\_adder}, labeled \inlinecode{FA0} through \inlinecode{FA3}, and wires their ports together exactly as specified in the instantiation statements introduced in Chapter 5. The testbench occupies the top of this hierarchy, with the DUT --- and, in turn, any modules the DUT itself instantiates --- nested beneath it. Elaboration is what links the testbench and the DUT into a single connected design rather than two independently verified but unconnected pieces of Verilog.
+
+Several categories of error are specific to this stage and cannot be detected during compilation, because they depend on how modules are connected rather than on whether any individual module is syntactically valid. A port mismatch occurs when an instantiation connects signals to a module's ports incorrectly, either by supplying the wrong number of connections in positional instantiation, or by misspelling a port name in named instantiation:
+
+\begin{codeblock}{verilog}
+full_adder FA1 (
+    .A(A[1]),
+    .B(B[1]),
+    .Cinn(c1),
+    .Sum(Sum[1]),
+    .Cout(c2)
+);
+\end{codeblock}
+
+In this instantiation, the port name \inlinecode{Cinn} does not match any port declared in the \inlinecode{full\_adder} module --- the correct name is \inlinecode{Cin}. Named port connections of this kind compile without difficulty, since each line is syntactically valid on its own, but elaboration fails because the simulator cannot match \inlinecode{Cinn} to any port in the module being instantiated. This category of error is corrected by checking the instantiation against the exact port list declared in the module header, rather than against the order in which signals appear in the source.\\
+
+A related error arises from width mismatches between a port and the signal connected to it. If a four-bit bus is connected to a port declared as a single bit, or vice versa, the elaborator may either truncate the connection, replicate it, or report a width mismatch, depending on the simulator's configuration and the severity settings in use. Because a silently truncated connection can produce a design that elaborates and simulates without any reported error, while still behaving incorrectly, width mismatches are one of the more dangerous classes of elaboration-time defect, and instantiations should always be checked manually against the declared widths in the module header.\\
+
+A third category involves an instantiated module that does not exist at all --- for example, where a top-level testbench references a module name that was renamed, deleted, or never written. Unlike the missing-file case discussed in Section 8.1, this scenario can occur even when every supplied file compiles correctly, if the name used in the instantiation simply does not correspond to any module the simulator has seen. The resulting message identifies the unresolved instance, and the fix is to confirm that the module name in the instantiation statement exactly matches the module name declared with the \inlinecode{module} keyword in its source file.
+
+% TODO: Insert elaboration hierarchy diagram
+
+\begin{figure}[h]
+\centering
+\caption{Hierarchy constructed during elaboration, showing the testbench module at the top level, the DUT instance beneath it, and any further instances --- such as individual Full Adder stages --- nested within the DUT.}
+\label{fig:elaboration_hierarchy}
+\end{figure}
+
+A design that elaborates successfully is, at this point, a fully connected model: every instance has been expanded, every port has been connected to a signal of the expected width, and the complete hierarchy from the testbench down to the smallest leaf module exists as a single structure inside the simulator. What remains is to advance that structure through simulated time and observe how its signals behave, which is the task of simulation itself.
 
 \section{Simulation}
 
+Simulation is the stage at which the elaborated design is actually executed. Having confirmed that the source code is syntactically valid and that the design hierarchy is correctly connected, the simulator now advances through simulated time, evaluating the behavior described by the RTL and the testbench, and producing the signal values that will later be examined in the waveform viewer.\\
+
+Cadence Xcelium, like essentially all digital logic simulators, is event-driven rather than driven by a fixed time step. This means the simulator does not evaluate every signal in the design at every possible instant. Instead, it maintains a queue of pending events --- a signal changing value, a delay expiring, a clock edge occurring --- and advances simulated time only as far as the next scheduled event requires. Between events, no computation occurs, because no signal in the design has any reason to change. This is why a simulation containing long, idle delays does not consume proportionally long simulation runtimes: the simulator skips directly from one event to the next rather than stepping through every intervening nanosecond.\\
+
+The behavior of the testbench during simulation follows directly from the constructs introduced in Chapter 7. \inlinecode{initial} blocks begin executing at simulation time 0 and run through their statements in order, pausing only at explicit delay controls, exactly as described in Section 7.3. \inlinecode{always} blocks, by contrast, remain dormant until the event in their sensitivity list occurs, at which point their body executes once before the block returns to waiting for the next occurrence of that event, as described in Section 7.4. A clock generator constructed using \inlinecode{always \#5 clk = \textasciitilde{}clk;} is, from the simulator's point of view, simply a recurring event: every 5 ns of simulated time, the value of \inlinecode{clk} changes, and that change is itself scheduled as a new event for any logic --- inside the DUT or the testbench --- that is sensitive to it.\\
+
+Stimulus applied by the testbench propagates through the design according to this same event-driven principle. When a stimulus statement such as \inlinecode{A = 4'b0011;} executes inside an \inlinecode{initial} block, the simulator schedules an update to the signal \inlinecode{A}. Any combinational logic inside the DUT that depends on \inlinecode{A} --- for instance, a continuous assignment such as those introduced in Chapter 5 --- is re-evaluated as a consequence of that event, and its output is updated in turn. For a sequential design such as the Synchronous Counter from Chapter 6, a change to an input signal such as \inlinecode{reset} does not immediately change the registered output \inlinecode{count}; instead, the new value of \inlinecode{reset} is simply available the next time the \inlinecode{always @(posedge clk)} block in the DUT executes, which occurs only at the next rising edge of the clock. This distinction --- immediate response for combinational logic, clock-synchronized response for sequential logic --- is the same distinction introduced conceptually in Table 6.1, and it becomes directly observable once a simulation has been run and its results examined.
+
+\begin{codeblock}{verilog}
+initial begin
+    A = 4'b0011;
+    #1;
+    $display($time, " A is now %b", A);
+end
+\end{codeblock}
+
+In this short example, the assignment to \inlinecode{A} and the subsequent \inlinecode{\$display} are separated by a 1 ns delay. At simulation time 0, \inlinecode{A} takes the value \inlinecode{0011}; at simulation time 1, the \inlinecode{\$display} statement executes and reports that value. The delay is what allows the simulator to advance from one event to the next in a controlled, observable sequence, rather than executing every statement at the same instant.\\
+
+It is simulation, not compilation or elaboration, that constitutes verification in the sense introduced in Section 7.1. Compilation and elaboration confirm that a design is well formed and correctly connected; only simulation exercises the design's actual behavior against applied stimulus, and only simulation can reveal whether the DUT's response matches the behavior expected from its specification. A design can compile and elaborate without any reported error and still be functionally incorrect --- which is precisely why the laboratory exercises throughout this manual treat a clean compile as a necessary, but never sufficient, condition for considering a design verified.
+
+% TODO: Insert simulation flow diagram
+
+\begin{figure}[h]
+\centering
+\caption{Event-driven progression of simulated time, showing stimulus events in the testbench triggering combinational and sequential responses in the DUT.}
+\label{fig:simulation_flow}
+\end{figure}
+
+The console output produced by \inlinecode{\$monitor} and \inlinecode{\$display}, used throughout the testbenches in Chapter 7, provides one view of this behavior, but it is a strictly textual one: a sequence of printed lines, each tied to a single simulation time, with no direct sense of how signals relate to one another visually or how long a given value was held before changing. For anything beyond the smallest designs, this textual record becomes difficult to interpret efficiently. The standard practice in Cadence-based verification is therefore to record the simulation's signal activity to a waveform database and inspect that database using a waveform viewer such as SimVision, which is the subject of the next section.
+
 \section{Understanding Waveforms}
+
+A waveform viewer displays the value of one or more signals as a function of simulated time, using a graphical convention in which time advances from left to right along a horizontal axis and signal value is represented along the vertical extent of each signal's row. Rather than reading a long sequence of printed \inlinecode{\$monitor} lines, the designer can see, at a glance, exactly when a signal changed, how long it held a given value, and how its transitions relate to the transitions of every other signal displayed alongside it.\\
+
+The horizontal time axis is labeled in the simulation time units established by the \inlinecode{`timescale} directive at the top of the source file, as introduced in Chapter 4. A waveform generated from a testbench using \inlinecode{`timescale 1ns/1ps} will display its time axis in nanoseconds, with cursor measurements available to the picosecond precision specified by the second argument of that directive. Reading the time axis correctly is the first step in interpreting any waveform: a transition that appears to occur "immediately" after another may, on closer inspection, be separated by a small but nonzero delay, which is often the detail that distinguishes correct sequential behavior from a subtle timing defect.\\
+
+Each signal in the display is drawn as a trace whose vertical level indicates its logic value at each instant. For single-bit signals, the trace is drawn as a simple two-level waveform, low for a logic \inlinecode{0} and high for a logic \inlinecode{1}, with a vertical edge marking each transition. A transition from low to high is a rising edge, and a transition from high to low is a falling edge --- the same terminology introduced for clock signals in Section 6.2, and the terminology used throughout this manual whenever a clock-sensitive event is described. For multi-bit signals, such as the 4-bit \inlinecode{count} output of the Synchronous Counter, the waveform viewer typically displays the bus as a single trace annotated with its current value in binary, decimal, or hexadecimal, rather than as four separate single-bit traces, since this is normally easier to read for a register whose value changes as a unit.\\
+
+Two additional logic values appear in Verilog waveforms beyond \inlinecode{0} and \inlinecode{1}, both introduced conceptually in Chapter 4: \inlinecode{X}, representing an unknown or unresolved value, and \inlinecode{Z}, representing a high-impedance or undriven condition. In a waveform display, these are usually rendered in a distinct color or pattern --- commonly red or amber for \inlinecode{X}, and a dashed or hollow trace for \inlinecode{Z} --- so that they are visually distinct from a deliberate \inlinecode{0} or \inlinecode{1}. An \inlinecode{X} value appearing on an output signal almost always indicates a problem: either the signal has not yet been driven to a known value, or it is the result of a calculation involving another signal that is itself unresolved. A \inlinecode{Z} value appearing on a signal that is expected to be actively driven --- rather than on a genuinely tri-stated bus --- is equally suspicious and usually points to a missing or incorrect assignment somewhere in the design.\\
+
+The waveform display makes the relationship between stimulus and response directly visible. Each input signal driven by the testbench's \inlinecode{initial} block appears as a trace whose transitions correspond exactly to the assignment statements in that block, while each output signal produced by the DUT appears as a trace whose transitions are a consequence of those inputs, mediated by the DUT's internal logic. For a combinational design such as the Ripple Carry Adder, the \inlinecode{Sum} and \inlinecode{Cout} traces should change at essentially the same simulated time as the \inlinecode{A}, \inlinecode{B}, and \inlinecode{Cin} traces that drive them, since there is no clock to delay that response. For a sequential design such as the Synchronous Counter, the \inlinecode{count} trace should remain perfectly flat between rising edges of \inlinecode{clk}, and should change only at those edges --- a stable, unchanging signal between active edges is exactly the behavior expected of a clocked register, not a sign that the simulation has stalled.
+
+% TODO: Insert basic waveform example
+
+\begin{figure}[h]
+\centering
+\caption{Basic waveform display showing two single-bit input signals and a derived combinational output, illustrating rising edges, falling edges, and stable logic levels.}
+\label{fig:basic_waveform}
+\end{figure}
+
+Applying this to the Synchronous Counter from Chapter 6, a correct waveform should show \inlinecode{clk} toggling at a constant period throughout the simulation, \inlinecode{reset} held high for the initial interval described in the testbench from Section 7.8, and \inlinecode{count} remaining at \inlinecode{0000} for as long as \inlinecode{reset} is asserted at a rising edge. Once \inlinecode{reset} is released, \inlinecode{count} should advance by exactly one binary value at each subsequent rising edge of \inlinecode{clk}, holding each value steady until the next edge, and should wrap around from \inlinecode{1111} back to \inlinecode{0000} after sixteen such transitions, exactly as described in Section 6.6.
+
+% TODO: Insert counter waveform example
+
+\begin{figure}[h]
+\centering
+\caption{Waveform of the 4-bit Synchronous Counter showing \texttt{clk}, \texttt{reset}, and \texttt{count}, with state transitions occurring only at rising clock edges and wrap-around visible from \texttt{1111} to \texttt{0000}.}
+\label{fig:counter_waveform_example}
+\end{figure}
+
+It is this visual correspondence --- between the stimulus applied and the response observed, laid out along a shared time axis --- that makes the waveform viewer the primary tool for confirming functional correctness in Cadence-based verification. A textual report from \inlinecode{\$monitor} can confirm that a particular value occurred at a particular time, but a waveform makes the entire sequence of transitions, and the timing relationships between them, visible at once. This is also what makes the waveform viewer the primary tool for diagnosing a design that does \emph{not} behave correctly, which is the subject of the remainder of this chapter.
 
 \section{Common RTL Bugs}
 
+Most of the defects encountered while verifying small RTL designs fall into a relatively small number of recurring categories. Recognizing these categories, and knowing how each one tends to appear in simulation and in the waveform viewer, considerably shortens the time required to locate and correct a defect.\\
+
+\paragraph{Incorrect signal connections.} The most frequent class of error is a simple miswiring: a port connected to the wrong signal, or two signals swapped relative to their intended positions. This was illustrated in Section 8.2 with a misspelled port name, but an equally common variant compiles and elaborates without any error at all, because every connection is syntactically and structurally valid --- it is simply the wrong valid connection.\\
+
+\begin{codeblock}{verilog}
+full_adder FA0 (
+    .A(B[0]),
+    .B(A[0]),
+    .Cin(Cin),
+    .Sum(Sum[0]),
+    .Cout(c1)
+);
+\end{codeblock}
+
+Here, \inlinecode{A[0]} and \inlinecode{B[0]} have been swapped relative to the ports they are connected to. Because addition is commutative, this particular mistake happens to produce a correct \inlinecode{Sum} output and would not be caught by a quick visual check of the waveform; an error of exactly this kind is much easier to find through a self-checking testbench of the kind introduced in Section 7.7, or by deliberately testing asymmetric operand values, than by inspecting the waveform alone. This is one of the clearest illustrations of why incorrect connections are dangerous: the symptom in simulation can range from an obviously wrong output to no visible symptom whatsoever, depending on the specific logic involved.\\
+
+\paragraph{Missing reset logic.} A sequential design that omits reset handling, or implements it incorrectly, typically shows its symptom directly after the start of simulation: the registered output begins in an unknown \inlinecode{X} state and may remain unknown indefinitely, since nothing in the design ever assigns it a defined starting value.
+
+\begin{codeblock}{verilog}
+module counter_no_reset(clk, count);
+    input clk;
+    output reg [3:0] count;
+
+    always @(posedge clk)
+        count <= count + 1'b1;
+endmodule
+\end{codeblock}
+
+Because \inlinecode{count} is never explicitly initialized and the module provides no reset input at all, \inlinecode{count} begins simulation as \inlinecode{xxxx} and, since incrementing an unknown value produces another unknown value, remains \inlinecode{xxxx} for the entire simulation. In the waveform viewer, this appears as a trace that never leaves its unknown-value color, even though \inlinecode{clk} continues to toggle normally. The correction is the synchronous reset structure introduced in Section 6.3 and used throughout the counter designs in Chapter 6: an explicit \inlinecode{if (reset)} branch inside the clocked \inlinecode{always} block that forces the register to a known value.\\
+
+\paragraph{Width mismatches.} As discussed in Section 8.2, connecting signals of different widths can silently truncate or zero-extend a value rather than producing an explicit error. A related but distinct mistake occurs entirely within RTL, when an intermediate signal is declared narrower than the value it needs to represent:
+
+\begin{codeblock}{verilog}
+wire [2:0] sum_wire;
+assign sum_wire = A + B;
+\end{codeblock}
+
+If \inlinecode{A} and \inlinecode{B} are each four bits wide, their sum can require five bits to represent without loss, but \inlinecode{sum\_wire} has been declared with only three bits. The most significant bits of the true sum are silently discarded. In simulation, this appears as a \inlinecode{sum\_wire} value that is correct for small operands but becomes incorrect --- and which, because no \inlinecode{X} or \inlinecode{Z} is involved, gives no immediate visual warning in the waveform --- once the operands grow large enough for the true sum to exceed three bits. This category of bug is best caught by deliberately including boundary-value test vectors, of the kind discussed in Section 7.6, rather than only typical mid-range values.\\
+
+\paragraph{Incorrect sensitivity lists.} A combinational \inlinecode{always} block must list every signal that the block reads, or the simulator will not re-evaluate the block when one of the omitted signals changes:
+
+\begin{codeblock}{verilog}
+always @(A)
+    Y = A & B;
+\end{codeblock}
+
+Here, the block is intended to describe a combinational AND function, but its sensitivity list includes only \inlinecode{A}. If \inlinecode{B} changes while \inlinecode{A} remains constant, the block does not re-execute, and \inlinecode{Y} continues to display its previous, now-incorrect value until the next time \inlinecode{A} happens to change. In a waveform, this produces a \inlinecode{Y} trace that appears to lag behind one of its inputs, holding a stale value for an interval where it should have updated immediately. The correction is either to list every relevant signal explicitly, as in \inlinecode{always @(A or B)}, or to use the wildcard form \inlinecode{always @(*)}, which instructs the simulator to infer the complete sensitivity list automatically --- the safer and more commonly recommended option for combinational logic.\\
+
+\paragraph{Misuse of blocking and non-blocking assignments.} Chapter 6 introduced the non-blocking assignment operator \inlinecode{<=} as the standard form for clocked sequential logic, since it allows every register triggered by the same clock edge to be updated using the values that existed before that edge, rather than values already updated earlier in the same procedural block. Using the blocking assignment operator \inlinecode{=} in place of \inlinecode{<=} inside a clocked block can produce results that depend on the order in which statements happen to be written, rather than on the intended hardware behavior:
+
+\begin{codeblock}{verilog}
+always @(posedge clk) begin
+    q1 = d;
+    q2 = q1;
+end
+\end{codeblock}
+
+The intention here is almost certainly a two-stage shift register, where \inlinecode{q2} should receive the \emph{previous} value of \inlinecode{q1} at each clock edge, not its newly updated value. Because blocking assignments take effect immediately within the procedural block, \inlinecode{q2} instead receives the same new value as \inlinecode{q1} on the same edge, collapsing the intended two-stage delay into a single stage. In simulation, this appears as \inlinecode{q1} and \inlinecode{q2} updating in lockstep on every clock edge, rather than \inlinecode{q2} trailing \inlinecode{q1} by one cycle as a shift register requires. The correction is to use \inlinecode{<=} for both assignments, consistent with the convention established in every sequential design in Chapter 6.\\
+
+\paragraph{Incorrect testbench stimulus.} Not every defect originates in the DUT. A testbench that applies stimulus too quickly relative to the clock period, or that changes an input at the same simulated instant as a clock edge, can produce a result that depends on simulator-specific event ordering rather than on well-defined design behavior. A stimulus statement that omits a delay before checking a combinational output may sample that output before the design has had any opportunity to respond:
+
+\begin{codeblock}{verilog}
+A = 1; B = 1;
+if (Y !== 1)
+    $error("Unexpected Y value");
+\end{codeblock}
+
+If no delay separates the assignment to \inlinecode{A} and \inlinecode{B} from the check on \inlinecode{Y}, the check executes in the same simulation time step as the stimulus, and depending on simulator event ordering, may observe \inlinecode{Y} before the continuous assignment driving it has been re-evaluated. This produces an intermittent, simulator-dependent false failure that has nothing to do with a defect in the DUT. The correction, consistent with every combinational testbench in this manual, is to insert a short delay --- even \inlinecode{\#1} --- between applying stimulus and checking the corresponding response.\\
+
+\paragraph{Uninitialized signals.} Finally, a signal that is read before it has ever been assigned a value will simulate as \inlinecode{X}, exactly as discussed under missing reset logic above, but this category extends beyond registers to ordinary testbench variables. A stimulus sequence that conditionally assigns a signal in some branches but not others can leave that signal at \inlinecode{X} for any branch that does not explicitly set it, producing intermittent \inlinecode{X} values in the waveform that depend on which branch of the testbench happened to execute. The general remedy, applicable to both RTL and testbench code, is the same discipline introduced in Section 4.5: every signal should be given a known value through an explicit path in the code, rather than relying on a default that may not exist.\\
+
+This is not an exhaustive list of every mistake possible in Verilog RTL, but it accounts for the large majority of defects encountered in the laboratory designs covered by this manual. Recognizing the waveform signature associated with each category --- a stalled \inlinecode{X}, a lagging output, two signals updating in unexpected lockstep, an intermittent failure tied to event ordering --- is what allows a designer to move from "the simulation produced the wrong answer" to "the defect is most likely of this specific kind" within the first few seconds of looking at a waveform, which is the starting point for the structured debugging process described in the next section.
+
 \section{Debugging Methodology}
 
-\section{Laboratory Exercise}
+Locating the cause of an incorrect simulation result is more efficient when approached as a structured process rather than as an unstructured search through the RTL. The categories introduced in Section 8.5 describe \emph{what} commonly goes wrong; this section describes \emph{how} to proceed once a simulation has produced a result that does not match the expected behavior.\\
 
-\subsection*{Counter Waveform Analysis}
+The first step is to observe the failure precisely, rather than reacting to a general impression that "the counter is broken." This means identifying exactly which signal carries an incorrect value, at exactly which simulation time, and exactly how that value differs from what was expected. A vague observation such as "the waveform looks wrong" is far less useful than a specific one such as "\inlinecode{count} remained at \inlinecode{0011} through two additional rising edges of \inlinecode{clk} instead of advancing to \inlinecode{0100} and \inlinecode{0101}." The more precisely the failure is described, the smaller the space of possible causes becomes.\\
+
+Once the failure has been described precisely, it should be reproduced reliably. If a self-checking testbench of the kind introduced in Section 7.7 is in use, this typically means confirming that the same \inlinecode{\$error} is reported on every run, given the same stimulus. If the testbench relies only on \inlinecode{\$monitor} and visual waveform inspection, reproduction means re-running the simulation and confirming that the same incorrect value appears at the same simulation time. A failure that cannot be reproduced consistently is usually a symptom of the testbench timing issues described in Section 8.5, rather than a genuine defect in the DUT, and should be investigated as such before any RTL changes are made.\\
+
+With a reproducible failure in hand, the next task is to identify the specific signal responsible for the incorrect behavior, which is not always the signal where the symptom was first noticed. An incorrect \inlinecode{Sum} output, for example, might originate from a fault in the \inlinecode{Sum} logic itself, or it might originate from an incorrect carry signal feeding into that logic from an earlier stage, as in the Ripple Carry Adder from Chapter 5. Tracing the source of the incorrect behavior means working backward through the design hierarchy from the symptom, adding intermediate signals --- including internal signals not present at the top-level ports, such as the carry wires \inlinecode{c1} through \inlinecode{c3} --- to the waveform viewer until the point at which a value first becomes incorrect can be located precisely.\\
+
+Once that point has been located, the relevant RTL and testbench code should be inspected directly, with the specific defect categories from Section 8.5 in mind as a checklist: Is this signal connected to the correct port? Is reset logic present and correctly structured? Are bus widths consistent throughout this expression? Does this \inlinecode{always} block's sensitivity list include every signal it reads? Is this a blocking assignment where a non-blocking assignment was intended? Working through these questions against the actual source, rather than guessing at a fix, is what distinguishes disciplined debugging from trial and error.\\
+
+Only after the cause has been identified with reasonable confidence should the design be modified. The modification should be the minimal change required to address the identified cause --- not a broader rewrite undertaken in the hope that it will incidentally fix the problem, since a broader rewrite makes it considerably harder to confirm afterward which specific change was actually responsible for the correction. The simulation should then be re-run from compilation onward, since a change to RTL or testbench source invalidates any previously elaborated design, and the original failure condition should be checked explicitly to confirm that it no longer occurs.\\
+
+Finally, the correction should be verified more broadly than the single failing condition that prompted it. A fix that resolves one specific test vector but has not been checked against the rest of the stimulus sequence may have addressed only a symptom rather than the underlying defect, or may have introduced a new defect elsewhere in the design. Re-running the complete testbench, rather than only the previously failing portion, is the appropriate final step before considering the design corrected.
+
+\begin{enumerate}
+    \item Observe the failure precisely.
+    \item Reproduce the failure reliably.
+    \item Identify the specific signal responsible.
+    \item Trace the source of the incorrect behavior through the design hierarchy.
+    \item Inspect the relevant RTL and testbench code against known defect categories.
+    \item Modify the design with the minimal change required.
+    \item Re-run the simulation from compilation onward.
+    \item Verify the correction against the complete stimulus sequence.
+\end{enumerate}
+
+Throughout this process, the simulator's own messages --- compilation errors, elaboration warnings, and any \inlinecode{\$error} or \inlinecode{\$warning} output from a self-checking testbench --- should be read carefully and in full, rather than skimmed past in order to reach the waveform viewer more quickly. A precise error message naming a specific signal, line number, or mismatched value is frequently sufficient on its own to identify the defect category from Section 8.5, without any further investigation being required. Equally, any assumption made about the design's behavior --- "this block should only execute on the rising edge," "this bus is four bits wide everywhere it is used" --- should be checked directly against the source code rather than taken on faith, since an incorrect assumption of this kind is itself one of the most common reasons debugging takes longer than it should.
+
+% TODO: Insert RTL debugging workflow diagram
+
+\begin{figure}[h]
+\centering
+\caption{Structured debugging workflow, from initial observation of a simulation failure through to verified correction of the underlying RTL or testbench defect.}
+\label{fig:debugging_workflow}
+\end{figure}
+
+This disciplined approach to debugging --- precise observation, reliable reproduction, deliberate tracing, minimal correction, and broad re-verification --- is not specific to small laboratory designs. It is the same approach required in larger verification environments, where hundreds or thousands of test vectors may be involved and where a single overlooked assumption can be considerably more expensive to track down than in the designs covered by this manual. The waveform-based techniques introduced in this chapter remain useful at that scale, but they are eventually supplemented by more systematic measures of how thoroughly a design has actually been exercised. That question --- not simply whether a design passes the test vectors it has been given, but whether those test vectors are sufficient in the first place --- is the subject of coverage analysis, introduced in Chapter 9.
+
+% =============================================================================
+% Section 8.7 – Laboratory Exercise: Counter Waveform Analysis
+% Chapter 8: Simulation and Waveform Analysis
+% =============================================================================
+
+\section{Laboratory Exercise -- Counter Waveform Analysis}
+\label{sec:sim-lab}
+
+
+% -----------------------------------------------------------------------------
+\subsubsection{Objective}
+\label{sec:sim-lab-objective}
+
+The purpose of this experiment is to analyze simulation waveforms generated
+from the 4-Bit Synchronous Counter designed in Chapter~6 and to verify whether
+the circuit behaves in accordance with its specification. Rather than
+introducing new RTL, this exercise focuses entirely on the post-simulation
+stage: loading signal data into the waveform viewer, interpreting the time-domain
+behavior of each signal, and systematically identifying any deviations from
+expected operation.
+
+By completing this exercise, the reader will develop practical competence in:
+
+\begin{itemize}
+    \item \textbf{Waveform interpretation} — reading the time-domain record
+          produced by the simulator and relating observed transitions to the
+          intended hardware behavior.
+    \item \textbf{Timing analysis} — verifying that state changes occur at
+          the correct clock edges and that no setup or hold violations are
+          visible at the register level.
+    \item \textbf{Signal tracing} — following a value from testbench stimulus
+          through the design hierarchy to its driven output, and confirming
+          that no intermediate connection is broken or incorrectly conditioned.
+    \item \textbf{Bug detection} — recognizing waveform symptoms that indicate
+          an error in the RTL or testbench, including stuck signals, unknown
+          states, incorrect reset behavior, and missing transitions.
+    \item \textbf{RTL debugging} — applying a systematic diagnostic procedure
+          to locate the source of each identified anomaly and confirming that
+          correction restores the expected waveform.
+\end{itemize}
+
+These skills form the practical core of functional verification. A simulation
+that completes without error messages does not guarantee correct hardware
+behavior; only careful waveform inspection can confirm that the design operates
+as intended under all applied stimulus conditions.
+
+% -----------------------------------------------------------------------------
+\subsubsection{Theory}
+\label{sec:sim-lab-theory}
+
+Simulation produces a time-ordered record of every signal transition that
+occurs during execution. The waveform viewer presents this record graphically,
+placing time on the horizontal axis and signal values on the vertical axis.
+Each signal trace shows when that signal was driven, what value it held, and
+how long it remained stable before transitioning again. This visual
+representation allows an engineer to reason about circuit behavior in a way
+that console messages alone cannot support.
+
+For combinational logic, the relationship between stimulus and response is
+straightforward: a change on an input produces a change on the affected outputs
+after a short propagation delay. Verification amounts to confirming that the
+output value matches the expected function of the current inputs.
+
+Sequential circuits require additional care. The output of a clocked register
+does not respond to input changes continuously. It samples its input at a
+specific clock edge and holds the captured value until the next active edge.
+Waveform analysis of a sequential design must therefore account for the
+timing relationship between the data signal, the clock, and the registered
+output. A correct observation is not simply that the right value appears on the
+output, but that it appears at the right clock edge and remains stable
+throughout the subsequent clock period.
+
+For a synchronous counter, every state transition is a direct consequence of a
+rising clock edge. The count output should change only at those edges, and the
+new value should be exactly one greater than the previous value, modulo the
+counter width. A waveform that shows transitions at any other time, or that
+shows incorrect next-state values, indicates an error in either the RTL or the
+testbench. Waveform analysis is therefore the primary tool for distinguishing
+between a design that functions correctly and one that merely produces output
+without violating simulation syntax rules.
+
+% -----------------------------------------------------------------------------
+\subsubsection{Experimental Setup}
+\label{sec:sim-lab-setup}
+
+This experiment uses the design files developed in previous chapters. No new
+RTL is required. The required components are:
+
+\begin{itemize}
+    \item The \texttt{synchronous\_counter\_4bit} module from Chapter~6,
+          implementing a 4-bit binary up-counter with synchronous reset.
+    \item The \texttt{synchronous\_counter\_4bit\_tb} testbench from Chapter~7,
+          which generates the clock, applies reset, and allows the counter to
+          run freely for several cycles before reasserting reset.
+    \item The Cadence simulation environment, configured with both Verilog
+          source files compiled and elaborated without errors.
+    \item The Cadence waveform viewer, used to load and inspect the simulation
+          output database after the simulation has completed.
+\end{itemize}
+
+Before beginning the waveform analysis, confirm that both source files compile
+without errors and that the simulation runs to completion. The \texttt{\$finish}
+statement in the testbench terminates the simulation after all stimulus vectors
+have been applied. If the simulation exits early with an error, the waveform
+database may be incomplete, and the exercise cannot proceed correctly.
+
+The following signals must be added to the waveform viewer for this experiment:
+
+\begin{itemize}
+    \item \texttt{clk} — the simulation clock generated by the testbench.
+    \item \texttt{reset} — the synchronous reset input applied by the testbench.
+    \item \texttt{count[3:0]} — the 4-bit counter output produced by the design
+          under test.
+\end{itemize}
+
+It is also useful to expand \texttt{count[3:0]} into its individual bit traces
+\texttt{count[3]}, \texttt{count[2]}, \texttt{count[1]}, and \texttt{count[0]}
+so that the contribution of each bit to the overall state can be observed
+independently. This separation is particularly helpful when debugging carry
+propagation or reset faults that affect only a subset of the output bits.
+
+\begin{figure}[h]
+\centering
+% TODO: Insert simulation environment screenshot
+\caption{Cadence simulation environment with the synchronous counter project
+         loaded, showing the source files, compilation status, and waveform
+         viewer ready to receive signal traces.}
+\label{fig:sim-env}
+\end{figure}
+
+% -----------------------------------------------------------------------------
+\subsubsection{Waveform Observation}
+\label{sec:sim-lab-observation}
+
+Once the simulation has completed successfully, the waveform database should be
+loaded into the waveform viewer. The procedure below describes the sequence of
+operations required to produce a complete and interpretable waveform display.
+
+\begin{enumerate}
+    \item \textbf{Launch the simulation.} From the Cadence simulation
+          environment, compile both source files and run the simulation with
+          \texttt{synchronous\_counter\_4bit\_tb} as the top-level module.
+          Confirm that the console reports no elaboration errors and that
+          the simulation completes normally.
+
+    \item \textbf{Open the waveform viewer.} After the simulation finishes,
+          open the waveform viewer from within the simulation environment. The
+          viewer loads the signal database generated during the simulation run.
+
+    \item \textbf{Add the relevant signals.} Navigate to the design hierarchy
+          panel and locate the top-level testbench instance. Add \texttt{clk},
+          \texttt{reset}, and \texttt{count[3:0]} to the waveform display.
+          Expand \texttt{count[3:0]} into individual bit traces if the viewer
+          supports hierarchical signal expansion.
+
+    \item \textbf{Adjust the time axis.} Use the zoom controls to expand the
+          horizontal scale so that individual clock periods are clearly visible.
+          A display range that shows between ten and twenty clock cycles
+          simultaneously provides enough context to observe both reset behavior
+          and several consecutive count transitions without losing sight of
+          the overall stimulus sequence.
+
+    \item \textbf{Zoom into transitions.} Select specific regions of interest
+          and zoom in further to examine the precise timing relationship
+          between the rising edge of \texttt{clk} and the subsequent change
+          on \texttt{count[3:0]}. The count output should update on the rising
+          edge, not between edges.
+
+    \item \textbf{Inspect the reset interval.} Locate the initial period during
+          which \texttt{reset} is asserted and confirm that \texttt{count[3:0]}
+          remains at \texttt{4'b0000} throughout. Then locate the point at
+          which \texttt{reset} is deasserted and observe whether the counter
+          begins incrementing on the very next rising clock edge.
+\end{enumerate}
+
+\begin{figure}[h]
+\centering
+% TODO: Insert counter waveform screenshot
+\caption{Waveform viewer display showing \texttt{clk}, \texttt{reset}, and
+         \texttt{count[3:0]} after a complete simulation run of the 4-bit
+         synchronous counter testbench.}
+\label{fig:counter-waveform}
+\end{figure}
+
+A correct waveform will show several distinct phases that correspond directly
+to the stimulus sequence applied by the testbench. During the initial reset
+period, \texttt{reset} is high and \texttt{count[3:0]} holds the value
+\texttt{0000} regardless of clock activity. When \texttt{reset} falls, the
+counter begins incrementing. Each rising edge of \texttt{clk} advances the
+count by one binary step. After the counter passes through all sixteen states
+and reaches \texttt{1111}, the next rising edge returns it to \texttt{0000},
+producing the expected overflow wrap-around. Later in the simulation, a second
+reset assertion reloads \texttt{0000} and the cycle continues from that point.
+
+% -----------------------------------------------------------------------------
+\subsubsection{Signal Analysis}
+\label{sec:sim-lab-analysis}
+
+Waveform observation confirms that signals are present and that transitions
+occur. Signal analysis goes further: it verifies that each transition occurs
+at the correct time, that the new value following each transition is the
+expected value, and that the timing relationships between signals are
+consistent with the intended hardware behavior.
+
+\paragraph{Clock Periodicity.}
+The first signal to examine is \texttt{clk}. Measure the time between two
+successive rising edges in the waveform viewer. This interval should equal
+the clock period defined in the testbench, which is 10~ns for the testbench
+developed in Chapter~7 (produced by the \texttt{always \#5 clk = \textasciitilde{}clk}
+statement). Confirm that the period is uniform throughout the simulation.
+An irregular clock period indicates a fault in the testbench clock generator
+rather than in the design under test.
+
+\paragraph{Rising Edge Identification.}
+Once the clock is confirmed to be correct, locate individual rising edges.
+These are the moments at which the counter is permitted to update. No
+transition on \texttt{count[3:0]} should occur at any other time. If the
+counter changes value between rising edges of \texttt{clk}, the design is
+not operating synchronously and an error is present in the RTL.
+
+\paragraph{Reset Behavior.}
+Inspect the interval during which \texttt{reset} is asserted. The
+\texttt{count[3:0]} output should remain at \texttt{4'b0000} for the
+entire duration, regardless of how many rising clock edges occur within
+that interval. The synchronous reset in the RTL is evaluated on the rising
+edge of \texttt{clk}; consequently, the hold at zero is edge-sampled rather
+than level-sensitive, and the output changes only at clock boundaries.
+When \texttt{reset} falls low, the counter should advance to \texttt{0001}
+on the first subsequent rising edge.
+
+\paragraph{Counter Increment Sequence.}
+After reset is released, the counter should progress through the following
+binary state sequence, advancing by exactly one step per rising clock edge:
+
+\begin{center}
+\begin{tabular}{cc}
+\hline
+Rising Edge Number & \texttt{count[3:0]} \\
+\hline
+1  & \texttt{0000} \\
+2  & \texttt{0001} \\
+3  & \texttt{0010} \\
+4  & \texttt{0011} \\
+5  & \texttt{0100} \\
+6  & \texttt{0101} \\
+7  & \texttt{0110} \\
+8  & \texttt{0111} \\
+9  & \texttt{1000} \\
+10 & \texttt{1001} \\
+11 & \texttt{1010} \\
+12 & \texttt{1011} \\
+13 & \texttt{1100} \\
+14 & \texttt{1101} \\
+15 & \texttt{1110} \\
+16 & \texttt{1111} \\
+17 & \texttt{0000} \\
+\hline
+\end{tabular}
+\end{center}
+
+Edge number~1 in the table above corresponds to the first rising edge after
+\texttt{reset} is deasserted, at which point the count is already
+\texttt{0000} due to the preceding reset interval. Verify each row of this
+table against the waveform. A single incorrect entry identifies either a
+broken carry connection between bit positions or an error in the increment
+expression.
+
+\paragraph{Overflow Wrap-Around.}
+The transition from \texttt{1111} to \texttt{0000} is the most important
+individual event to examine. In a 4-bit register, the increment of
+\texttt{1111} by one produces \texttt{10000} in five bits; the most
+significant bit is discarded by the 4-bit width, and the register stores
+\texttt{0000}. This behavior should be visible directly in the waveform as
+an abrupt return to the zero state on the rising edge that follows
+\texttt{1111}. If the counter instead halts at \texttt{1111}, or if it
+jumps to an unexpected value, the increment expression or the register
+declaration contains an error.
+
+\paragraph{Stable Output States.}
+Between any two successive rising edges, \texttt{count[3:0]} should be
+perfectly stable. No glitch, partial transition, or momentary unknown value
+should be visible. A glitch mid-cycle on a specific bit suggests an
+asynchronous path that is not correctly gated by the clock, which would
+indicate a structural error in the RTL. In the synchronous counter design
+used in this exercise, such glitches should not be present because the
+counter is implemented entirely through a clocked \texttt{always} block.
+
+Taken together, these observations confirm that the design satisfies the
+fundamental requirements of a synchronous 4-bit binary up-counter: it
+initializes to zero under reset, increments by one on each rising clock edge,
+holds each value stably between edges, and wraps around from the maximum
+value to zero without omitting any state.
+
+% -----------------------------------------------------------------------------
+\subsubsection{Bug Identification and Debugging}
+\label{sec:sim-lab-debug}
+
+Simulation waveforms frequently reveal behavioral anomalies that do not
+generate compilation errors or even simulation warnings. The engineer must
+recognize these anomalies from their visual signatures and trace each one
+back to its source in the RTL or testbench. This subsection presents
+a structured set of realistic debugging scenarios organized by symptom.
+
+\begin{figure}[h]
+\centering
+% TODO: Insert waveform debugging workflow diagram
+\caption{Systematic debugging workflow for waveform anomalies in synchronous
+         RTL designs. Each anomaly type leads to a defined diagnostic path
+         that narrows the possible causes before any code is modified.}
+\label{fig:debug-workflow}
+\end{figure}
+
+The general principle underlying every scenario below is the same: do not
+modify code in response to a symptom before forming a specific hypothesis
+about the cause. Random changes to an RTL file may coincidentally correct
+one problem while introducing another, and the resulting waveform may look
+correct even though the design logic remains flawed. A disciplined
+hypothesis-test-confirm cycle produces reliable results and is the standard
+practice in professional verification.
+
+\paragraph{Scenario 1: Counter Not Incrementing.}
+
+\textit{Symptom.} The \texttt{reset} signal deasserts correctly and the
+\texttt{clk} signal toggles as expected, but \texttt{count[3:0]} remains
+at \texttt{0000} or at some other fixed value throughout the remainder of
+the simulation.
+
+\textit{Probable Cause.} The most common causes in order of likelihood are:
+\begin{itemize}
+    \item The \texttt{reset} signal is not actually deasserted in simulation
+          time even though it appears to be from a casual inspection. Verify
+          the exact time at which \texttt{reset} falls in the waveform viewer
+          and confirm that subsequent rising edges of \texttt{clk} occur after
+          that point.
+    \item The sensitivity list of the \texttt{always} block does not include
+          \texttt{posedge clk}, causing the block to never execute during
+          simulation.
+    \item The increment expression uses a blocking assignment
+          (\texttt{count = count + 1}) combined with an incorrect use of
+          the variable, producing a zero result on every evaluation.
+    \item A wire is used for \texttt{count} instead of a \texttt{reg}, and
+          the synthesis tool or simulator rejects or silently ignores the
+          procedural assignment.
+\end{itemize}
+
+\textit{Debugging Procedure.} Check the \texttt{always} block sensitivity
+list first. Then verify the port declaration of \texttt{count} to confirm
+it is declared as \texttt{output reg}. Add the internal signals of the
+\texttt{always} block to the waveform display if the tool supports it, and
+confirm that the block executes at each rising edge.
+
+\paragraph{Scenario 2: Counter Stuck at Zero.}
+
+\textit{Symptom.} The \texttt{count[3:0]} output displays \texttt{0000}
+throughout the entire simulation, including during the interval when reset
+should have been deasserted.
+
+\textit{Probable Cause.}
+\begin{itemize}
+    \item \texttt{reset} is never driven low in the testbench. Inspect the
+          \texttt{reset} trace and confirm that it actually falls to zero at
+          the expected time. If \texttt{reset} remains high for the entire
+          simulation, the counter will correctly hold at zero because the
+          synchronous reset is always evaluated as true.
+    \item The testbench drives \texttt{reset} correctly in simulation time,
+          but the delay values prevent the deassertion from occurring before
+          the \texttt{\$finish} statement terminates the simulation.
+    \item The \texttt{reset} port of the design under test is not connected
+          to the \texttt{reset} register in the testbench, causing the design
+          to receive a constant high value from the undriven wire.
+\end{itemize}
+
+\textit{Debugging Procedure.} Examine only the \texttt{reset} trace first.
+If it never transitions to zero, the problem is entirely in the testbench
+rather than in the design. Verify the testbench \texttt{initial} block and
+check that the delay values allow \texttt{reset} to fall before
+\texttt{\$finish} is reached. Then check the port connections in the
+instantiation statement.
+
+\paragraph{Scenario 3: Unknown (\texttt{X}) States on Count Output.}
+
+\textit{Symptom.} The \texttt{count[3:0]} trace displays an unknown value,
+shown as \texttt{X} or as a cross-hatched region in the waveform viewer,
+either at the start of the simulation or at some point during normal counting.
+
+\textit{Probable Cause.}
+\begin{itemize}
+    \item The register was never initialized. In simulation, an uninitialized
+          \texttt{reg} starts at \texttt{X}. If the testbench does not assert
+          \texttt{reset} before the first rising clock edge, the counter
+          attempts to increment an unknown value and propagates \texttt{X}
+          through subsequent states.
+    \item A net or register used in the increment expression is itself
+          uninitialized. If any operand of the addition is \texttt{X}, the
+          result is also \texttt{X}.
+    \item A testbench register used to drive a design input is declared
+          but never assigned an initial value in the \texttt{initial} block.
+\end{itemize}
+
+\textit{Debugging Procedure.} Locate the first clock edge at which an
+\texttt{X} value appears. If it is the very first edge, the initialization
+sequence in the testbench is the most likely cause. Confirm that
+\texttt{reset} is asserted before the first rising edge, and confirm that
+\texttt{clk} is initialized to a known value in the testbench. If the
+\texttt{X} appears mid-simulation, trace the affected signal back through
+its driver to the point of origin.
+
+\paragraph{Scenario 4: Incorrect Reset Behavior.}
+
+\textit{Symptom.} When \texttt{reset} is asserted, \texttt{count[3:0]}
+does not return to \texttt{0000}. Instead it holds its current value,
+jumps to an arbitrary state, or produces an \texttt{X} output.
+
+\textit{Probable Cause.}
+\begin{itemize}
+    \item The reset logic inside the \texttt{always} block is conditioned on
+          the wrong polarity. If the design uses \texttt{if (!reset)} rather
+          than \texttt{if (reset)}, the reset is active low, but the testbench
+          is driving it active high, producing inverted behavior.
+    \item The reset assignment in the \texttt{always} block uses a blocking
+          assignment (\texttt{count = 4'b0000}) rather than a non-blocking
+          assignment (\texttt{count <= 4'b0000}). This may produce correct
+          results in some simulators but can cause unexpected behavior when
+          the block is executed alongside other procedural code.
+    \item The reset condition is placed in the wrong branch of the
+          \texttt{if-else} statement, causing the counter to increment instead
+          of clearing.
+\end{itemize}
+
+\textit{Debugging Procedure.} Isolate the \texttt{reset} and \texttt{count}
+traces and examine the precise clock edge at which \texttt{reset} is
+asserted. Verify whether \texttt{count} changes at all on that edge. If
+it increments when it should clear, check the branch ordering in the
+\texttt{if-else} construct. If \texttt{count} does not respond at all,
+verify reset polarity and confirm that the reset variable in the testbench
+is connected to the reset port of the design instance.
+
+\paragraph{Scenario 5: Unexpected Mid-Cycle Transitions.}
+
+\textit{Symptom.} The \texttt{count[3:0]} output changes value at a time
+other than a rising edge of \texttt{clk}. This may appear as a brief
+glitch or as a sustained transition that does not align with any clock event.
+
+\textit{Probable Cause.}
+\begin{itemize}
+    \item The \texttt{always} block sensitivity list includes signals other
+          than \texttt{posedge clk}, such as \texttt{always @(count)}
+          or \texttt{always @(*)}. This causes the block to execute
+          combinatorially rather than on clock edges, making the output change
+          whenever any input signal changes.
+    \item A continuous assignment (\texttt{assign}) drives a signal that is
+          also driven inside the \texttt{always} block, creating a conflict
+          that causes unpredictable transitions.
+\end{itemize}
+
+\textit{Debugging Procedure.} Review the \texttt{always} block sensitivity
+list. For synchronous sequential logic, the sensitivity list must contain
+only \texttt{posedge clk}, or \texttt{posedge clk or negedge reset} if an
+asynchronous reset is used. Confirm that no continuous assignment drives
+\texttt{count} in parallel with the procedural block.
+
+\paragraph{Scenario 6: Missing Clock Toggles.}
+
+\textit{Symptom.} The \texttt{clk} trace shows a constant high or low value
+rather than a periodic waveform. The counter consequently never updates.
+
+\textit{Probable Cause.}
+\begin{itemize}
+    \item The \texttt{clk} register in the testbench is initialized to
+          \texttt{0} but the \texttt{always \#5 clk = \textasciitilde{}clk}
+          statement is missing or contains a syntax error that prevents it
+          from executing.
+    \item The initial block drives \texttt{clk} to a value and then falls
+          off the end without spawning the toggle process, leaving the signal
+          static.
+    \item The \texttt{\$finish} statement in the testbench executes before
+          the first clock edge occurs, terminating the simulation immediately.
+\end{itemize}
+
+\textit{Debugging Procedure.} Examine the \texttt{clk} trace first. If
+it is static, the testbench clock generator is the problem and the design
+itself need not be examined at all. Confirm that the \texttt{always}
+block for clock generation exists in the testbench, that it is syntactically
+correct, and that the initial value of \texttt{clk} is explicitly set before
+the simulation begins.\\
+
+\paragraph{General Debugging Principle.}
+In every scenario above, the diagnostic procedure follows the same
+high-level workflow: examine only the affected signal first, identify the
+clock edge at which the anomaly begins, trace the signal back through its
+driver, form a specific hypothesis about the RTL or testbench cause, verify
+the hypothesis by inspecting the source code, make a targeted correction,
+and rerun the simulation to confirm that the waveform now matches the
+expected behavior. Waveform analysis is not a process of eliminating code
+at random; it is a structured investigation in which each step narrows the
+field of possible causes until only one remains.
+
+% -----------------------------------------------------------------------------
+\subsubsection{Expected Results}
+\label{sec:sim-lab-expected}
+
+A correctly implemented and verified simulation of the 4-bit synchronous
+counter should produce a waveform exhibiting the following characteristics.
+
+\begin{itemize}
+\item \textbf{Stable clock waveform.} The \texttt{clk} signal toggles at a
+	constant 10~ns period throughout the entire simulation. No edge is missing,
+	no period varies, and the waveform begins immediately at time zero.
+
+\item \textbf{Proper reset behavior.} During the initial reset interval,
+	\texttt{count[3:0]} holds \texttt{0000} and does not change at any rising
+	clock edge. When \texttt{reset} is deasserted, the counter begins
+	incrementing on the first subsequent rising edge without delay. When
+	\texttt{reset} is reasserted later in the simulation, the counter returns
+	to \texttt{0000} on the next rising edge from whatever value it holds
+	at that moment.
+
+\item \textbf{Sequential count progression.} After reset is released, the
+	output steps through the full 4-bit binary sequence from \texttt{0000}
+	to \texttt{1111}, advancing by exactly one on every rising edge of
+	\texttt{clk}. No state is repeated out of sequence and no state is
+	skipped.
+
+\item \textbf{Overflow wrap-around.} On the rising edge that follows
+	\texttt{1111}, the output transitions directly to \texttt{0000} without
+	pausing at any intermediate value. This confirms that the 4-bit register
+	width is handled correctly and that no carry is propagating into a fifth bit.
+
+\item \textbf{Absence of undefined states.} No \texttt{X} or \texttt{Z} value
+	appears on \texttt{count[3:0]} at any point during the simulation. All four
+	bits are driven to known binary values from the first reset edge onward.
+
+\item \textbf{Clock-edge-only transitions.} Every transition visible on
+	\texttt{count[3:0]} coincides precisely with a rising edge of \texttt{clk}.
+	No glitch, partial transition, or mid-cycle change is visible anywhere in
+	the waveform.
+\end{itemize}
+
+\begin{figure}[h]
+\centering
+% TODO: Insert final validated waveform
+\caption{Final validated simulation waveform for the 4-bit synchronous
+         counter. The display shows \texttt{clk}, \texttt{reset}, and
+         \texttt{count[3:0]} across the complete testbench stimulus sequence,
+         confirming initialization, sequential increment, overflow wrap-around,
+         and correct response to the second reset assertion.}
+\label{fig:counter-final-waveform}
+\end{figure}
+
+The waveform in Figure~\ref{fig:counter-final-waveform} constitutes the
+acceptance criterion for this exercise. A simulation whose output matches
+this reference in every observable detail has been verified to the level
+of functional correctness achievable through directed simulation. Any
+departure from the reference behavior, however small, should be treated as
+an open finding and debugged to resolution before the design is carried
+forward to the synthesis stage.
+
+% -----------------------------------------------------------------------------
+\subsubsection{Conclusion}
+\label{sec:sim-lab-conclusion}
+
+This experiment demonstrated the complete waveform analysis workflow applied
+to the 4-bit synchronous counter developed in the preceding chapters. Rather
+than introducing new RTL code, the exercise focused on what the simulation
+output reveals about the behavior of an already-written design and on how
+to interpret that output systematically.\\
+
+The waveform observation phase established the correct procedure for loading
+simulation results, adding signals to the viewer, and adjusting the display
+so that timing relationships are clearly visible. The signal analysis phase
+applied that procedure to verify clock periodicity, reset behavior, binary
+state progression, overflow wrap-around, and output stability between clock
+edges. Together these steps confirmed that the counter satisfies its
+functional specification under the stimulus conditions applied by the
+testbench.\\
+
+The debugging section addressed the most common failure modes encountered
+in practice. Each scenario illustrated how a specific symptom in the
+waveform can be traced to a specific cause in the RTL or testbench, and
+each concluded with a targeted diagnostic procedure rather than a
+suggestion to edit code at random. This structured approach is applicable
+to any sequential design, not only to the counter studied here.\\
+
+Waveform analysis and systematic debugging form the practical foundation
+upon which all subsequent verification activities are built. Confirming
+functional correctness through directed simulation, as practiced in this
+exercise, is the necessary first step before coverage analysis can identify
+which behaviors remain untested. The following chapter introduces coverage
+analysis using the Cadence Integrated Metrics Center and explains how
+coverage-driven verification extends the confidence established by
+simulation into a measurable, closeable quality metric.\\

@@ -1,21 +1,313 @@
 \chapter{Coverage Analysis using IMC}
 
 \section{Why Simulation Alone is Not Enough}
+\label{sec:sim-not-enough}
+
+Every design verified in the preceding chapters was confirmed correct by running a simulation and observing that the outputs matched expectations. The Half Adder produced the correct Sum and Carry for all four input combinations. The Ripple Carry Adder produced the correct four-bit result across a selection of operand pairs. The Synchronous Counter incremented on every rising clock edge, reset to zero when instructed, and wrapped around from \inlinecode{1111} to \inlinecode{0000} as required. In each case, the simulation passed, and the design moved forward.\\
+
+The critical question that was never asked in those exercises is a simple one: did the simulation actually exercise every behavior the design is capable of? Passing a simulation means that the stimulus applied by the testbench produced the expected response from the design under test. It does not mean that every possible behavior of the design was tested, or that every logic path inside the RTL was evaluated at least once. A design that passes every test vector it has been given may still contain errors in logic that the testbench never reached.\\
+
+Consider the Synchronous Counter from Chapter 6. Its testbench applied a reset pulse at the beginning of the simulation, allowed the counter to run through its full sixteen-state sequence, and then applied a second reset partway through. Suppose a slightly different testbench had been written — one that initialized the counter and allowed it to count, but omitted the second reset assertion entirely. The simulation would still complete without any reported error. The \inlinecode{\$monitor} output would still show the correct incrementing sequence. The waveform would appear correct. Yet an important behavioral condition — reset asserting while the counter is mid-sequence — would never have been exercised. If the reset logic in the RTL contained a subtle defect that only manifested after the counter had already been running, no amount of successful simulation output would reveal it.\\
+
+This is not a hypothetical concern. It reflects a structural limitation of directed simulation as a verification methodology. Directed simulation applies a fixed, manually constructed sequence of test vectors to the design. The quality of the verification is directly bounded by the quality and completeness of the stimulus. If the stimulus was carefully designed, coverage will be high. If the stimulus was chosen hastily or based only on the most convenient operating conditions, entire portions of the design may go untested, and no tool will automatically flag this gap unless the designer has explicitly arranged for it to be measured.\\
+
+The implications become more significant as designs grow larger. A 4-bit counter has sixteen states, and it is straightforward to confirm by inspection that a testbench exercises all of them. A finite state machine with thirty states and dozens of conditional transitions is not so easily audited by inspection. A datapath with multiple input registers, arithmetic units, and control signals can be configured in thousands of distinct ways, only a fraction of which can be covered by any practical directed testbench. For designs of this complexity, it is not merely inconvenient to rely on inspection alone — it becomes genuinely unreliable. An engineer who has written a testbench covering several hundred test vectors may have exercised the most common operating conditions thoroughly while leaving an entire class of edge-case behavior untouched.\\
+
+Coverage analysis addresses this problem by providing a quantitative measurement of how thoroughly the simulation has exercised the design. Rather than asking whether the simulation passed, coverage analysis asks what portion of the design was actually reached by the simulation. This shifts the verification question from a binary outcome — pass or fail — to a continuous metric: how much of the design space has been explored, and what remains unexplored. The answer to that question is what guides the testbench engineer toward the test vectors that are still missing, before those missing scenarios become silicon defects.\\
+
+The remainder of this chapter introduces the main categories of coverage measurement used in digital verification, explains how each one is collected by the Cadence simulation environment, and describes how the Cadence Integrated Metrics Center is used to inspect and act on the resulting data. Each metric provides a different perspective on the same underlying question: not whether the design passed a given set of tests, but whether those tests were sufficient to give meaningful confidence that the design is correct.\\
 
 \section{Code Coverage}
+\label{sec:code-coverage}
+
+The most direct form of coverage measurement is code coverage, which tracks which lines or statements within the RTL source were actually evaluated during simulation. The underlying idea is straightforward: if a line of Verilog was never executed during any simulation run, then the behavior described by that line was never tested. Whatever logic that line represents — a conditional branch, an assignment, an arithmetic operation — it remains unverified, and any defect in it would have gone undetected regardless of how many test vectors were applied to the rest of the design.\\
+
+Statement coverage, which is the most basic form of code coverage, records whether each individual executable statement in the RTL was reached at least once during the simulation. Each \inlinecode{assign}, each line within a procedural block, and each statement within a conditional branch is tracked separately. After the simulation completes, the coverage tool can report exactly which statements were evaluated and which were not. An uncovered statement is a direct indicator that some part of the design logic was not exercised, and it becomes a prioritized item for testbench improvement.\\
+
+Line coverage is closely related and is often reported alongside statement coverage. Where statement coverage is concerned with logical execution units, line coverage is concerned with source file line numbers. In practice, for the RTL coding styles used in this manual — where each statement typically occupies its own line — the two metrics tend to agree closely. The distinction becomes more apparent in dense, multi-statement lines or in macro-generated code, neither of which is common in the beginner-level RTL covered by these exercises.\\
+
+It is important to understand what code coverage does and does not measure. A high code coverage percentage indicates that the simulation visited a large fraction of the source code. It does not indicate that those visits produced the correct result. A statement can be executed many times while producing a wrong output on every occasion, and code coverage will still report it as covered. Coverage measures breadth of execution, not correctness of execution. For that reason, code coverage is a necessary supplement to directed testing, not a replacement for it. The appropriate interpretation is that low code coverage provides strong evidence of insufficient stimulus, while high code coverage is a prerequisite for, but not a guarantee of, thorough verification.\\
+
+In the context of the Synchronous Counter design used throughout this manual, statement coverage would confirm whether each branch of the clocked \inlinecode{always} block was evaluated. If the testbench never deasserted the reset input, the \inlinecode{else} branch — the line that increments the counter — would show zero coverage, immediately revealing that the normal counting behavior was never tested. Conversely, if reset was never asserted after the first initialization, the \inlinecode{if (reset)} branch might show limited coverage after the initial reset period, depending on how the simulator counts evaluations. These direct, actionable indicators are what make code coverage a valuable first pass in the coverage analysis workflow.\\
 
 \section{Branch Coverage}
+\label{sec:branch-coverage}
+
+Code coverage at the statement level confirms that a line of RTL was reached, but it does not confirm that every possible outcome of a decision point was exercised. Branch coverage addresses this by tracking, for each conditional construct in the RTL, whether both the true and false outcomes were taken at least once during simulation.\\
+
+Every \inlinecode{if} statement in a Verilog RTL description defines a decision point with at least two possible outcomes: the branch taken when the condition is true, and the branch taken when the condition is false. In a design of any meaningful complexity, these decision points govern the routing of control flow, the selection of register next-state values, and the behavior of the circuit under different operating conditions. If only one outcome of a given conditional is ever exercised, the logic implementing the other outcome remains unverified, regardless of how many times the statement itself was reached.\\
+
+The significance of this can be illustrated with the increment logic from the Synchronous Counter. The core of the RTL is a single conditional statement inside a clocked block:
+
+\begin{codeblock}{verilog}
+always @(posedge clk) begin
+    if (reset)
+        count <= 4'b0000;
+    else
+        count <= count + 1'b1;
+end
+\end{codeblock}
+
+This construct defines two branches. The true branch, executed when \inlinecode{reset} is asserted, clears the counter to zero. The false branch, executed during normal operation, increments the count by one. If a testbench applies reset continuously throughout the simulation without ever releasing it, the false branch is never taken, and the increment logic is never tested. Code coverage might still report the \inlinecode{if} statement as executed, because the condition was evaluated. Branch coverage, however, would report the false outcome as not covered, providing an immediate and unambiguous signal that the counting behavior was never observed.\\
+
+Branch coverage is especially valuable in control-intensive designs, where the majority of the RTL consists of conditional statements, case constructs, and selection logic. A multiplexer selects between inputs based on a control signal; if only one setting of that control signal is ever applied, the other input paths remain unverified. A finite state machine advances through states based on conditional transitions; if several transition conditions are never triggered, the corresponding next-state logic is invisible to the simulation. In both cases, branch coverage provides the measurement needed to identify and close those gaps.\\
+
+A \inlinecode{case} statement extends this concept to multiple branches simultaneously. Each arm of the case, including the \inlinecode{default} arm if one is present, constitutes a separate branch in the coverage model. For a 2-bit input, a case statement has four possible branches. A testbench that only exercises two of the four input values leaves the other two branches uncovered, and branch coverage will report exactly this. This makes branch coverage a natural tool for verifying that all cases in a case statement have been tested, which is a common requirement in sequential state machine verification.\\
 
 \section{Toggle Coverage}
+\label{sec:toggle-coverage}
+
+Statement and branch coverage describe the behavior of the control flow paths within the RTL. Toggle coverage describes the behavior of the signals themselves. Specifically, it measures whether each signal in the design was observed to transition from logic zero to logic one, and from logic one to logic zero, at least once during the simulation.\\
+
+The motivation for toggle coverage begins with a simple observation: a signal that never changes its logic value during simulation provides no information about the circuits that depend on it. If a control net is stuck at zero throughout the entire simulation, any logic gated by that net cannot have been exercised in its active state. The combinational paths that depend on it were never evaluated with that input high. The registered values that it enables or suppresses were never captured under those conditions. Whatever behavior the design exhibits when that signal is asserted remains entirely unobserved.\\
+
+In a direct-drive laboratory testbench, toggle coverage failures often reveal straightforward omissions. A reset signal that is driven high at the start of the simulation but never asserted again will fail the high-to-low transition check for the false-to-true direction, depending on its polarity. A select input to a multiplexer that is held at a fixed value for the entire simulation will fail toggle coverage on that signal entirely, regardless of how many test vectors were applied to the data inputs. These failures are simple to interpret and simple to correct: the testbench must be extended to drive the missing transitions.\\
+
+Toggle coverage is also a useful detector of structural problems in the design hierarchy. A signal that is declared and connected within the RTL but that never toggles in simulation may indicate a disconnected net, an incorrectly driven output, or a design condition that is architecturally unreachable given the applied stimulus. In larger designs, toggle coverage analysis is sometimes used as an initial health check during debug bring-up, because a significant number of non-toggling signals in an unexpected portion of the hierarchy can indicate a wiring error or a missing clock enable that would not be visible from inspection alone.\\
+
+Two specific signals deserve mention in the context of the Synchronous Counter design. The clock input \inlinecode{clk} should toggle for the entire duration of the simulation, because the testbench generates it using a continuous \inlinecode{always} block toggle construct introduced in Chapter 7. If the clock fails to toggle, no register updates can occur, and the entire design is effectively frozen. Toggle coverage on the clock input therefore serves as a basic sanity check on the testbench's clock generator. The reset input \inlinecode{reset}, on the other hand, must be both asserted and deasserted during the simulation to achieve full toggle coverage, which is why the testbench in Chapter 7 applied two distinct reset pulses rather than a single one at initialization. Viewing toggle coverage data after a simulation run can confirm whether this requirement was satisfied, and can flag incomplete testbenches that only drive one polarity of a control signal.\\
 
 \section{Functional Coverage}
+\label{sec:functional-coverage}
+
+The coverage metrics introduced in the preceding sections — code, branch, and toggle — are all derived automatically from the structure of the RTL source code. They measure properties of the implementation: which statements executed, which decision paths were taken, which nets changed value. This automatic derivation is both a strength and a limitation. It is a strength because it requires no additional effort from the engineer beyond enabling the coverage collection; the tool discovers the measurable quantities from the code itself. It is a limitation because an RTL implementation may not capture all of the behaviors that matter from a specification perspective. A design can achieve one hundred percent code and branch coverage while never having visited a meaningful corner case that the specification explicitly requires to be verified.\\
+
+Functional coverage addresses this by measuring verification completeness in terms defined by the engineer rather than terms derived from the RTL. Where structural coverage asks whether the implementation was exercised, functional coverage asks whether the specification was exercised. The engineer defines a set of coverage goals — often called cover points — that correspond to meaningful scenarios in the design's intended operating space. The coverage tool tracks how many of those goals were satisfied during simulation, and the engineer's task is to ensure that all of them are reached before the design is released to synthesis.\\
+
+In the context of the Synchronous Counter, functional coverage might be defined around the values that the counter actually reaches. A testbench that runs the counter for only eight clock cycles after reset would achieve high code and branch coverage — the increment logic and the reset logic would both be exercised — but the counter would only have passed through states \inlinecode{0000} through \inlinecode{0111}. States \inlinecode{1000} through \inlinecode{1111} would remain unvisited. From a structural coverage perspective, this might not register as a problem, because the same increment expression is evaluated identically for all sixteen states. From a functional coverage perspective, it is a clear gap: the full range of counter states was not exercised, and behaviors specific to the upper half of the count range — such as overflow detection logic that only activates near \inlinecode{1111} — would remain untested.\\
+
+For finite state machine designs, functional coverage is expressed in terms of state visits and transition activations. Each state in the machine is a cover point, and each conditional transition is another. A simulation that drives the machine through some of its states but never activates certain transitions leaves the corresponding next-state logic unverified. Depending on the machine's complexity, this can be a subtle omission that is entirely invisible from code and branch coverage data, because the statements implementing those transitions may be syntactically unreachable only under specific input sequences that the testbench never produced.\\
+
+Functional coverage becomes increasingly important as designs grow in complexity beyond the introductory circuits covered in this manual. For a simple counter or adder, the set of meaningful behaviors is small enough that code and branch coverage provide a reasonably complete picture. For a complete processor datapath, a memory controller, or a communications protocol engine, the space of meaningful behavioral scenarios grows to a size that cannot be inferred automatically from the RTL structure. An engineer working on such a design must explicitly define the functional properties that matter — the instruction combinations, the memory access patterns, the protocol state sequences — and measure whether simulation has achieved them. This is the role of functional coverage, and it is the reason that coverage-driven verification in industrial practice extends well beyond the structural metrics that are sufficient for beginner-level designs.\\
 
 \section{Using IMC}
+\label{sec:using-imc}
+
+Cadence provides a dedicated tool for collecting, analyzing, and reporting on coverage data produced by simulation. This tool is the Integrated Metrics Center, referred to throughout the Cadence toolchain as \inlinecode{imc}. IMC is not itself a simulator; it does not execute Verilog RTL or apply stimulus to a design under test. Its role is to receive the coverage database generated by the Xcelium simulator during a coverage-enabled simulation run, aggregate the collected metrics across one or more simulation sessions, and present the results in an organized, navigable format that allows the engineer to identify which coverage goals have been satisfied and which remain open.\\
+
+To use IMC, coverage collection must first be enabled in the simulator. By default, the Xcelium simulator executes the design and records waveform data without tracking coverage metrics, since coverage instrumentation introduces both simulation overhead and additional database storage. Coverage is enabled by passing appropriate flags to the \inlinecode{xrun} invocation. The \inlinecode{-coverage all} option instructs Xcelium to collect all available coverage types — code, branch, toggle, and any defined functional coverage constructs — during the simulation run. An alternative approach is to enable only specific coverage types using flags such as \inlinecode{-coverage b} for branch or \inlinecode{-coverage t} for toggle, which reduces overhead when only specific metrics are needed.\\
+
+A complete simulation invocation for the Synchronous Counter design, with full coverage collection enabled, takes the following form:
+
+\begin{codeblock}{csh}
+xrun -coverage all synchronous_counter_4bit.v synchronous_counter_4bit_tb.v
+\end{codeblock}
+
+This command compiles and simulates both source files in a single step, which is the same usage introduced in the simulation workflow in Chapter 8. The addition of \inlinecode{-coverage all} causes Xcelium to instrument the compiled design for coverage tracking and to write a coverage database to the local directory upon simulation completion. The database is typically stored under a subdirectory named \inlinecode{cov\_work} or similar, depending on the simulator configuration. The exact database location is reported in the simulation log output.\\
+
+Once the simulation has completed, IMC can be launched from the same directory to analyze the resulting database:
+
+\begin{codeblock}{csh}
+imc -load cov_work/scope/worklib
+\end{codeblock}
+
+The \inlinecode{-load} option points IMC to the coverage database directory generated by the simulator. Alternatively, IMC can be launched interactively without a command-line path argument, in which case the database can be loaded from within the IMC graphical interface. The tool presents a hierarchical view of the design modules alongside the associated coverage data, allowing the engineer to navigate from the top-level testbench module down through each instantiated submodule and inspect the coverage results at whatever level of detail the analysis requires.\\
+
+The workflow, then, has a natural two-phase structure that builds directly on the simulation workflow established in Chapter 8. In the first phase, the simulation is run with coverage enabled, exercising the design under test with the testbench's stimulus and generating a coverage database as a side effect of that execution. In the second phase, IMC is used to analyze the database and identify which coverage goals were satisfied. These two phases may be iterated multiple times as the testbench is improved, with IMC results from each iteration guiding the next round of stimulus development. This iterative process is the basis of the coverage closure methodology described in Section 9.8.\\
 
 \section{Coverage Reports}
+\label{sec:coverage-reports}
+
+When IMC loads a coverage database, it presents the collected data through several complementary views. The most immediate is a summary report that lists the overall coverage percentage for each metric type across the entire design. This top-level summary provides a first orientation to the state of the verification effort: it indicates at a glance whether the simulation has achieved broad coverage across the design or whether significant gaps remain. A summary showing ninety-five percent branch coverage and ninety-eight percent toggle coverage on a simple sequential design suggests that the testbench is nearly complete. A summary showing forty percent code coverage on a newly written testbench suggests that a large fraction of the design has never been reached.\\
+
+Beneath the summary, IMC provides a module-level breakdown that shows the coverage metrics for each individual module in the design hierarchy separately. This hierarchical view is particularly useful when the design under test consists of multiple instantiated submodules, as in the Ripple Carry Adder from Chapter 5, where four individual Full Adder instances are embedded within a top-level module. Coverage that appears adequate at the top level may conceal low coverage in a specific submodule, if that submodule was not sufficiently exercised by the applied stimulus. The module-level report exposes such discrepancies directly, allowing the engineer to direct attention to the specific parts of the design that need additional testing rather than attempting to infer the problem from the aggregate percentage alone.\\
+
+Within each module, IMC provides a source-annotated view that marks each statement or line in the RTL source with its coverage status. Lines that were executed at least once are typically shown in a neutral or positive annotation. Lines that were never executed are highlighted distinctly, often in a contrasting color in the graphical interface, making them immediately visible during review. This source-level annotation is one of the most practically useful outputs of coverage analysis, because it translates an abstract percentage into a concrete list of specific code regions that must be targeted by additional test vectors.\\
+
+Branch coverage results are presented as hit and miss counts for each conditional construct. For an \inlinecode{if-else} statement, IMC will report whether the true branch, the false branch, or both were taken during simulation. For a \inlinecode{case} statement, each case arm is reported individually, making it straightforward to identify which specific case values were never exercised. This level of detail is what distinguishes branch coverage from simple statement coverage: not just whether the conditional was reached, but which of its outcomes were observed.\\
+
+Toggle coverage reports list each signal in the design alongside the transitions observed. A signal is typically reported as fully covered when both the zero-to-one and one-to-zero transitions have been observed at least once. A signal that was held at a constant value throughout the simulation will show both transitions as uncovered. A signal that transitioned in only one direction will show partial coverage. IMC typically presents this data as a percentage of signals with full toggle coverage within each module, alongside a detailed list of the specific nets that did not toggle, which can be sorted and filtered to prioritize the most significant coverage gaps.\\
+
+Interpreting coverage percentages requires some engineering judgment. A coverage target of one hundred percent is a common aspiration, but it is not always achievable or meaningful. Some logic within a well-designed RTL description is architecturally unreachable under normal operating conditions: default arms of case statements that exist only to satisfy completeness requirements, reset sequences that can only be activated in ways not modeled by the testbench, or diagnostic paths that are guarded by conditions the simulation environment cannot reproduce. Coverage tools cannot automatically distinguish between logic that is unreachable because the stimulus is insufficient and logic that is unreachable because it was deliberately designed that way. The engineer must review uncovered regions individually and make a judgment about whether each one represents a genuine verification gap or a known unreachable construct. Unreachable constructs can typically be excluded from the coverage model through tool-specific exclusion mechanisms, allowing the reported percentage to reflect only the portions of the design that can and should be exercised.\\
 
 \section{Coverage Closure}
+\label{sec:coverage-closure}
 
-\section{Laboratory Exercise}
+Coverage closure is the process of iteratively improving verification completeness until the coverage data satisfies the criteria established for the design. It is not a single-pass activity. A first simulation run will almost always reveal coverage gaps, because initial testbenches tend to exercise the most straightforward operating conditions without explicitly targeting boundary cases, unusual input sequences, or infrequently activated control paths. Coverage analysis makes those gaps visible, and the engineer's response is to add stimulus that specifically targets the uncovered regions. The updated testbench is then simulated again, new coverage data is collected, and the results are inspected once more. This loop continues until the coverage metrics reach an acceptable level.\\
 
-\subsection*{Counter Coverage Analysis}
+The practical sequence for coverage closure follows directly from the tools and workflows described in preceding sections. After a baseline simulation run with coverage enabled, IMC is used to identify the first set of coverage gaps: uncovered statements, untaken branches, non-toggling signals, or unvisited functional cover points. The engineer reviews these gaps and determines, for each one, whether it represents a testbench deficiency or a known unreachable construct. Testbench deficiencies are addressed by adding new test vectors or modifying existing ones to produce the stimulus conditions that activate the missing behaviors. Known unreachable constructs are documented and excluded from the coverage model. The revised testbench is then run again, and the new coverage results are compared against the previous run to confirm that the targeted gaps have been closed and that no regressions have been introduced.\\
+
+Each iteration of this loop should be targeted rather than speculative. Adding test vectors randomly in the hope of improving coverage is inefficient and produces testbenches that are difficult to maintain. The more productive approach is to read the IMC report carefully, identify the specific uncovered branch or signal, trace it back to the RTL to understand what stimulus condition would activate it, and write a test vector that directly exercises that condition. For the Synchronous Counter, an uncovered \inlinecode{else} branch in the reset logic immediately suggests that a test must hold \inlinecode{reset} low for multiple clock cycles. An uncovered high-to-low transition on \inlinecode{reset} immediately suggests that a test must assert reset and then deassert it. The coverage data provides the precise information needed to construct the missing test efficiently.\\
+
+The question of when to stop is a matter of engineering judgment rather than a fixed rule. One hundred percent coverage across all metrics is occasionally achievable for simple designs and is a reasonable target for laboratory exercises. In industrial practice, verification teams often define coverage goals in terms of specific thresholds for each metric type — ninety-five percent branch coverage and ninety percent toggle coverage, for example — together with documented justifications for any remaining uncovered regions. The important discipline is not to choose an arbitrary number and stop, but to ensure that every uncovered region has been reviewed and either targeted for additional testing or explicitly excluded with a documented rationale. A coverage gap that has been reviewed and consciously accepted is a defensible engineering decision. A coverage gap that exists simply because no one looked at it is a verification risk.\\
+
+For the laboratory exercises that follow, the goal of coverage closure is to achieve complete coverage of the counter's reset behavior, increment behavior, and overflow behavior under the stimulus applied by the testbench. The coverage analysis workflow provides the measurement framework needed to confirm when that goal has been reached, and the IMC reports provide the detailed data needed to identify and close any remaining gaps. The next section applies this workflow to the Synchronous Counter design in a structured laboratory exercise, completing the verification flow from RTL simulation through coverage measurement and closure.\\
+
+\section{Laboratory Exercise -- Counter Coverage Analysis}
+
+
+\subsection{Objective}
+
+The objective of this laboratory exercise is to apply the coverage analysis workflow described in Sections 9.1 through 9.8 to the 4-bit Synchronous Counter developed in Chapter 6 and verified through simulation in Chapters 7 and 8. The exercise proceeds in two phases. In the first phase, the existing testbench from Chapter 7 is run with coverage collection enabled, and the resulting database is inspected in IMC to identify which behaviors were exercised and which were not. In the second phase, the testbench is improved to address the identified gaps, the simulation is rerun, and coverage closure is confirmed through a second IMC inspection. By the end of the exercise, the reader will have performed a complete coverage-driven verification iteration on a real RTL design using the Cadence toolchain.\
+
+\subsection{Files Required}
+
+This exercise uses the Verilog source files created in earlier chapters. No new RTL is required.
+
+\begin{itemize}
+    \item \inlinecode{synchronous\_counter\_4bit.v} — the 4-bit synchronous counter RTL developed in Chapter 6.
+    \item \inlinecode{synchronous\_counter\_4bit\_tb.v} — the testbench developed in Chapter 7, which generates the clock, applies reset, and allows the counter to run for several cycles.
+\end{itemize}
+
+Both files should be present in the working directory used for the simulation exercises in Chapter 8. If either file has been modified since that chapter, the original implementations from Chapters 6 and 7 should be restored before proceeding. The exercise begins from that known baseline and deliberately uses the original testbench first, so that its coverage gaps can be observed directly before any improvement is made.\
+
+\subsection{Procedure}
+
+The following procedure describes each step of the coverage analysis workflow in the order it should be performed. Each step should be completed fully before proceeding to the next.
+
+\begin{enumerate}
+
+\item \textbf{Navigate to the working directory.} Open a terminal session and change to the directory containing the counter source files. Confirm that both required files are present before proceeding:
+
+\begin{codeblock}{csh}
+cd ~/cadence_test
+ls synchronous_counter_4bit.v synchronous_counter_4bit_tb.v
+\end{codeblock}
+
+The \inlinecode{ls} command should confirm both files without reporting any errors. If either file is missing, it should be restored from the relevant chapter before continuing.
+
+\item \textbf{Run the simulation with coverage collection enabled.} Invoke \inlinecode{xrun} with the \inlinecode{-coverage all} flag to compile, elaborate, and simulate the design while collecting all available coverage metrics. The \inlinecode{-covworkdir} flag specifies the directory into which the coverage database will be written:
+
+\begin{codeblock}{csh}
+xrun -coverage all -covworkdir cov_work \
+     synchronous_counter_4bit.v \
+     synchronous_counter_4bit_tb.v
+\end{codeblock}
+
+The simulator will compile both source files, elaborate the hierarchy with \inlinecode{synchronous\_counter\_4bit\_tb} as the top-level module, run the simulation to completion, and write the coverage database to the \inlinecode{cov\_work} directory upon exit. The console output should conclude with a normal simulation completion message consistent with those observed in Chapter 8. Any compilation or elaboration errors reported at this stage should be resolved before proceeding, using the debugging methodology described in Chapter 8.
+
+\item \textbf{Verify that the coverage database was created.} Confirm that the \inlinecode{cov\_work} directory was populated by the simulation run:
+
+\begin{codeblock}{csh}
+ls -lh cov_work/
+\end{codeblock}
+
+The directory should contain subdirectories and database files created by Xcelium during the simulation. The presence of these files confirms that coverage instrumentation was active and that the database is available for IMC. If the directory is empty or absent, the simulation invocation should be reviewed to confirm that the \inlinecode{-coverage all} and \inlinecode{-covworkdir} flags were included correctly.
+
+\item \textbf{Launch IMC and load the coverage database.} Start the Cadence Integrated Metrics Center from the same working directory, pointing it to the coverage database generated in the previous step:
+
+\begin{codeblock}{csh}
+imc -load cov_work/scope/worklib
+\end{codeblock}
+
+IMC will open its graphical interface and load the collected coverage data. The main window presents a hierarchical view of the design on the left and a tabbed report area on the right. A successful load will show the testbench and counter modules listed in the hierarchy panel, each with associated coverage percentages.
+
+\begin{figure}[H]
+\centering
+% TODO: Insert screenshot of IMC main window after loading the counter coverage database,
+% showing the module hierarchy panel on the left and the coverage summary on the right.
+\caption{IMC main window after loading the coverage database generated from the initial counter testbench simulation.}
+\end{figure}
+
+\item \textbf{Open the coverage summary report.} In the IMC interface, navigate to the summary view, which presents aggregate coverage percentages for each metric type across the entire design. Record the reported percentages for statement coverage, branch coverage, and toggle coverage. These values represent the baseline coverage achieved by the original testbench from Chapter 7.
+
+\begin{figure}[H]
+\centering
+% TODO: Insert screenshot of the IMC coverage summary report showing statement, branch,
+% and toggle coverage percentages for the initial simulation run.
+\caption{IMC coverage summary report for the initial testbench run, showing baseline coverage percentages across all metric types.}
+\end{figure}
+
+\item \textbf{Inspect statement coverage.} In the module hierarchy, select the \inlinecode{synchronous\_counter\_4bit} module to open its source-annotated coverage view. Each statement in the RTL will be annotated to indicate whether it was executed during the simulation. Confirm that both statements within the \inlinecode{always} block — the reset assignment and the increment assignment — appear as covered. If either statement is marked as not covered, record it as a coverage gap for the analysis step that follows.
+
+\item \textbf{Inspect branch coverage.} Remaining in the source annotation view, examine the branch coverage data for the \inlinecode{if (reset)} conditional. IMC will indicate, for each branch, whether the true outcome and the false outcome were both observed during simulation. The true outcome corresponds to the reset being asserted at a rising clock edge. The false outcome corresponds to normal incrementing operation. Note the coverage status of each branch and record any that are reported as not covered.
+
+\begin{figure}[H]
+\centering
+% TODO: Insert screenshot of the IMC source annotation view showing the always block
+% of synchronous_counter_4bit.v with branch coverage annotations, highlighting any
+% uncovered branch in a contrasting color.
+\caption{IMC source annotation view for the synchronous counter, showing branch coverage results for the reset conditional. Uncovered branches are highlighted.}
+\end{figure}
+
+\item \textbf{Inspect toggle coverage.} Navigate to the toggle coverage report for the \inlinecode{synchronous\_counter\_4bit} module. Examine the toggle status of the \inlinecode{reset} input port and each bit of the \inlinecode{count} output bus. For each signal, IMC reports whether the zero-to-one and one-to-zero transitions were both observed. Record any signals for which one or both transitions are absent.
+
+\item \textbf{Record the baseline coverage results.} Before making any changes to the testbench, record the coverage percentages obtained from the initial simulation run. These values will be compared against the results obtained after testbench improvement to demonstrate the effect of targeted stimulus additions.
+
+\end{enumerate}
+
+\subsection{Coverage Gap Analysis}
+
+Inspection of the initial coverage report will typically reveal that the original testbench from Chapter 7 leaves a specific branch condition incompletely exercised. The testbench applies an initial reset pulse at the start of the simulation and then releases reset for an extended period to allow the counter to run freely. It later applies a brief second reset pulse before the simulation ends. Depending on the exact delay values in the stimulus sequence, the second reset assertion may occur at a point in the simulation where the coverage tool has already recorded the branch as hit from the first reset interval, or the tool may report the reset branch as covered because at least one rising clock edge coincided with reset being high during the first pulse.\
+
+A more instructive scenario, and one that students may encounter depending on the specific timing of their testbench, arises when the stimulus sequence does not deassert reset before the simulation ends — or when a modified version of the testbench was inadvertently saved without the second reset pulse. In this case, the branch coverage report will show the true branch of the \inlinecode{if (reset)} conditional as covered but will show reduced toggle coverage on the \inlinecode{reset} input, because the signal never completed a low-to-high-to-low cycle in full view of the simulator. Toggle coverage on \inlinecode{reset} would then show the high-to-low transition as unobserved.\
+
+Regardless of the precise gap identified, the important skill practiced in this exercise is reading the IMC report carefully enough to connect a coverage metric to a specific stimulus condition. An uncovered branch in the \inlinecode{if (reset)} structure means that a rising clock edge has never been observed while reset was in a particular state. A missing toggle transition on \inlinecode{reset} means that the signal was never driven in the missing direction. Both observations point to the same corrective action: the testbench must be extended to drive the \inlinecode{reset} signal in the missing polarity, at a point in the simulation sequence where at least one clock edge will sample it.\
+
+\subsection{Testbench Improvement}
+
+To close the coverage gaps identified in the preceding analysis, the testbench stimulus sequence should be extended to include an explicit second reset assertion after the counter has been running for a sufficient number of cycles. The following modification to the stimulus \inlinecode{initial} block demonstrates how this is accomplished. The additional reset pulse is inserted after the first free-running interval, ensuring that at least one rising clock edge samples \inlinecode{reset} high during the second assertion, and that a rising clock edge also samples it low after release:
+
+\begin{codeblock}{verilog}
+initial begin
+    $monitor($time, " reset=%b count=%b", reset, count);
+    reset = 1'b1;
+    #12;
+    reset = 1'b0;
+    #180;
+    reset = 1'b1;     // second reset assertion mid-sequence
+    #15;              // hold for at least one full clock period
+    reset = 1'b0;
+    #50;              // observe several post-reset count steps
+    $finish;
+end
+\end{codeblock}
+
+The original testbench from Chapter 7 already includes a second reset pulse, but if the timing values were insufficient to guarantee that a rising edge of \inlinecode{clk} coincided with \inlinecode{reset} being high during that pulse, the branch may have been recorded as partially covered. The revised version above holds the second reset assertion for 15~ns — one and a half clock periods given a 10~ns clock — which guarantees that at least one rising edge samples reset high, satisfying the branch coverage requirement and completing the toggle cycle on the \inlinecode{reset} signal.\
+
+The post-release delay of 50~ns allows five additional clock cycles to elapse after the second reset is removed. This ensures that the counter is observed returning to \inlinecode{0000} and then advancing normally from that point, which confirms that the reset behavior is correct not only at initialization but also after the counter has already been running for an extended period — precisely the corner case identified by the coverage gap analysis.\
+
+\subsection{Re-run and Verify}
+
+With the testbench updated, the simulation should be rerun with coverage collection enabled. Save the modified testbench and invoke \inlinecode{xrun} again, directing the new coverage database to a separate output directory so that the baseline results are preserved for comparison:
+
+\begin{codeblock}{csh}
+xrun -coverage all -covworkdir cov_work_v2 \
+     synchronous_counter_4bit.v \
+     synchronous_counter_4bit_tb.v
+\end{codeblock}
+
+After the simulation completes, launch IMC and load the updated database:
+
+\begin{codeblock}{csh}
+imc -load cov_work_v2/scope/worklib
+\end{codeblock}
+
+Navigate to the same coverage views inspected during the initial analysis — the summary report, the branch coverage annotation for the \inlinecode{always} block, and the toggle coverage report for the \inlinecode{reset} input — and confirm that the previously uncovered items are now reported as covered. The branch previously shown as not taken should now appear as hit. The toggle transitions on \inlinecode{reset} should both be present. The aggregate coverage percentages in the summary report should reflect these improvements.
+
+\begin{figure}[H]
+\centering
+% TODO: Insert screenshot of the IMC coverage summary report after the second simulation
+% run with the improved testbench, showing increased coverage percentages compared to
+% the baseline run.
+\caption{IMC coverage summary report after testbench improvement, showing closure of the branch and toggle coverage gaps identified in the initial analysis.}
+\end{figure}
+
+\subsection{Observation Table}
+
+The table below summarizes the coverage results expected from both simulation runs. The baseline column reflects the coverage achieved by the original testbench, and the improved column reflects the coverage achieved after the second reset pulse was added. Students should record their own observed values in place of the representative figures shown here, as the exact numbers may vary depending on the simulator version and testbench timing.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{|l|c|c|}
+\hline
+\textbf{Coverage Metric} & \textbf{Initial Testbench} & \textbf{Improved Testbench} \\
+\hline
+Statement Coverage & 100\% & 100\% \\
+Branch Coverage    & 50\%  & 100\% \\
+Toggle Coverage    & 75\%  & 100\% \\
+\hline
+\end{tabular}
+\caption{Coverage results for the 4-bit Synchronous Counter before and after testbench improvement. Representative values are shown; students should record actual values from their IMC reports.}
+\label{tab:coverage-results}
+\end{table}
+
+The statement coverage figure of one hundred percent in both runs is expected, because the original testbench already exercises both the reset path and the increment path at least once. The branch and toggle improvements visible in the second run are a direct consequence of the targeted stimulus addition described in the preceding section — an illustration of the principle established in Section 9.8 that coverage gaps should be addressed through specific, justified additions to the testbench rather than through broad, unguided changes.\
+
+\subsection{Conclusion}
+
+This laboratory exercise demonstrated a complete iteration of the coverage-driven verification workflow applied to the 4-bit Synchronous Counter. The simulation was run with coverage collection enabled using \inlinecode{xrun}, the resulting database was loaded into IMC, and the coverage reports were inspected to identify a specific gap in the branch and toggle coverage of the reset logic. A targeted addition to the testbench stimulus sequence addressed that gap, and a second simulation run confirmed that the identified metrics had been closed.\
+
+The exercise reinforces the central observation made in Section 9.1: a simulation that passes is not, by itself, sufficient evidence that a design has been thoroughly verified. The original testbench produced correct waveforms and a clean \inlinecode{\$monitor} output in Chapter 8, yet the coverage analysis revealed that a specific behavioral condition — the reset signal being asserted at a clock edge after the counter had already been running — was exercised incompletely. Coverage measurement made that gap visible in a way that waveform inspection alone could not.\
+
+The coverage closure methodology practiced here scales directly to more complex designs. The workflow is the same regardless of the size of the design under test: enable coverage in the simulator, inspect the IMC reports for uncovered regions, trace each gap to the specific stimulus condition that would activate it, add that condition to the testbench, and rerun. What changes with design complexity is the number of iterations required and the sophistication of the stimulus needed to reach deep corner cases — topics that extend into more advanced verification methodologies beyond the scope of this manual. For the foundational VLSI workflow described here, the combination of Xcelium simulation, IMC coverage analysis, and the iterative closure process demonstrated in this exercise provides a complete and practical verification framework for the RTL designs encountered throughout these chapters.\
